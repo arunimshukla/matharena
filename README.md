@@ -46,6 +46,12 @@ If you choose this option, disregard `uv run` in all instructions and use python
 ---
 ## 🏃 Running an Eval
 
+Before running harness models, build the Docker image and prepare its cache once from the repository root:
+
+```bash
+bash scripts/build_harness_arxivlean_image.sh
+```
+
 Execute the following command to evaluate a model on a competition:
 ```bash
 uv run python scripts/run.py --comp path/to/competition --models path/to/model1
