@@ -14,7 +14,7 @@ from axle import AxleClient, CheckResponse
 from matharena.utils import normalize_conversation
 
 
-DEFAULT_LEAN_ENVIRONMENT = "lean-4.29.0"
+DEFAULT_LEAN_ENVIRONMENT = "lean-4.31.0"
 LOOGLE_DIR_ENV = "MATHARENA_LOOGLE_DIR"
 REPO_ROOT = Path(__file__).resolve().parents[3]
 COMPARATOR_BIN = REPO_ROOT / "external" / "comparator" / ".lake" / "build" / "bin" / "comparator"
@@ -24,6 +24,8 @@ COMPARATOR_PROJECT_DIR = REPO_ROOT / "external" / "comparator_project"
 COMPARATOR_LOCK = threading.Lock()
 COMPARATOR_AXIOMS = ["propext", "Quot.sound", "Classical.choice"]
 COMPARATOR_TIMEOUT_WARNING = "Comparator timed out; accepted based on Axle only."
+COMPARATOR_UNAVAILABLE_WARNING = "Comparator unavailable; accepted based on Axle only."
+COMPARATOR_FALLBACK_WARNINGS = frozenset({COMPARATOR_TIMEOUT_WARNING, COMPARATOR_UNAVAILABLE_WARNING})
 LOOGLE_PROCESS = None
 LEAN_EXPLORE_SERVICE = None
 LOOGLE_LOCK = threading.Lock()
@@ -36,8 +38,12 @@ LEAN_DECL_NAME_RE = re.compile(
 ADDED_TO_FILE_HEADER = "### Added To File ###"
 
 
+def _strip_lean_imports(content):
+    return "\n".join(line for line in content.splitlines() if not line.lstrip().startswith("import "))
+
+
 async def _check_with_axle(content, environment=DEFAULT_LEAN_ENVIRONMENT):
-    content = "\n".join(line for line in content.splitlines() if not line.lstrip().startswith("import "))
+    content = _strip_lean_imports(content)
     async with AxleClient() as client:
         return await client.check(content=content, environment=environment, ignore_imports=True, timeout_seconds=600)
 
@@ -327,12 +333,23 @@ def _extract_submission_blocks(model_output):
 
 
 def _run_comparator_check(model_output, formal_statement, messages=None):
-    if not all(
-        path.exists()
-        for path in [COMPARATOR_BIN, LEAN4EXPORT_BIN, LANDRUN_BIN, COMPARATOR_PROJECT_DIR / "lakefile.lean"]
-    ):
-        return None
+    required_paths = [
+        COMPARATOR_BIN,
+        LEAN4EXPORT_BIN,
+        LANDRUN_BIN,
+        COMPARATOR_PROJECT_DIR / "lakefile.lean",
+        COMPARATOR_PROJECT_DIR / "lean-toolchain",
+    ]
+    missing_paths = [path for path in required_paths if not path.exists()]
+    if missing_paths:
+        logging.getLogger(__name__).warning(
+            "%s Missing: %s",
+            COMPARATOR_UNAVAILABLE_WARNING,
+            ", ".join(str(path) for path in missing_paths),
+        )
+        return COMPARATOR_UNAVAILABLE_WARNING
 
+    formal_statement = _strip_lean_imports(formal_statement)
     theorem_name_match = LEAN_DECL_NAME_RE.search(formal_statement)
     if theorem_name_match is None:
         return "Comparator could not extract the theorem name from the formal statement."
@@ -341,6 +358,7 @@ def _run_comparator_check(model_output, formal_statement, messages=None):
         model_output, formal_statement=formal_statement, messages=messages
     )
     solution_code = "\n\n".join(block for block in [executed_prefix, theorem_block] if block.strip())
+    solution_code = _strip_lean_imports(solution_code)
 
     with COMPARATOR_LOCK:
         with tempfile.TemporaryDirectory(prefix="matharena-comparator-") as tmpdir:
@@ -373,10 +391,41 @@ def _run_comparator_check(model_output, formal_statement, messages=None):
             )
 
             env = os.environ.copy()
-            env["PATH"] = f"{LANDRUN_BIN.parent}:{LEAN4EXPORT_BIN.parent}:{env.get('PATH', '')}"
             try:
+                lean_prefix = subprocess.run(
+                    ["lean", "--print-prefix"],
+                    cwd=tmpdir_path,
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                )
+                if lean_prefix.returncode != 0:
+                    logging.getLogger(__name__).warning(
+                        "%s Could not resolve the comparator Lean toolchain: %s",
+                        COMPARATOR_UNAVAILABLE_WARNING,
+                        lean_prefix.stderr.strip(),
+                    )
+                    return COMPARATOR_UNAVAILABLE_WARNING
+
+                lean_bin_dir = Path(lean_prefix.stdout.strip()) / "bin"
+                lake_bin = lean_bin_dir / "lake"
+                if not lake_bin.is_file():
+                    logging.getLogger(__name__).warning(
+                        "%s Missing comparator lake binary: %s",
+                        COMPARATOR_UNAVAILABLE_WARNING,
+                        lake_bin,
+                    )
+                    return COMPARATOR_UNAVAILABLE_WARNING
+
+                # landrun grants execute permission to the path resolved from PATH.
+                # Put the real toolchain binaries before elan's symlinks so nested
+                # `lake build` calls remain executable inside the Landlock sandbox.
+                env["PATH"] = (
+                    f"{LANDRUN_BIN.parent}:{LEAN4EXPORT_BIN.parent}:{lean_bin_dir}:{env.get('PATH', '')}"
+                )
                 result = subprocess.run(
-                    ["lake", "env", str(COMPARATOR_BIN), "comparator.json"],
+                    [str(lake_bin), "env", str(COMPARATOR_BIN), "comparator.json"],
                     cwd=tmpdir_path,
                     env=env,
                     capture_output=True,
@@ -385,10 +434,17 @@ def _run_comparator_check(model_output, formal_statement, messages=None):
                 )
             except subprocess.TimeoutExpired:
                 return COMPARATOR_TIMEOUT_WARNING
+            except OSError as exc:
+                logging.getLogger(__name__).warning("%s %s", COMPARATOR_UNAVAILABLE_WARNING, exc)
+                return COMPARATOR_UNAVAILABLE_WARNING
 
     if result.returncode == 0:
         return None
-    return (result.stderr or result.stdout or "Comparator rejected the submission.").strip()
+    comparator_output = "\n".join(part for part in [result.stdout, result.stderr] if part).strip()
+    if "[landrun:error]" in comparator_output.lower() and "permission denied" in comparator_output.lower():
+        logging.getLogger(__name__).warning("%s %s", COMPARATOR_UNAVAILABLE_WARNING, comparator_output)
+        return COMPARATOR_UNAVAILABLE_WARNING
+    return comparator_output or "Comparator rejected the submission."
 
 
 def get_lean_feedback_dict_with_formal_statement(
@@ -421,8 +477,8 @@ def get_lean_feedback_dict_with_formal_statement(
 
     if use_comparator:
         comparator_error = _run_comparator_check(model_output, formal_statement, messages=messages)
-        if comparator_error == COMPARATOR_TIMEOUT_WARNING:
-            feedback["warnings"].append(COMPARATOR_TIMEOUT_WARNING)
+        if comparator_error in COMPARATOR_FALLBACK_WARNINGS:
+            feedback["warnings"].append(comparator_error)
             return feedback
         if comparator_error:
             feedback["okay"] = False

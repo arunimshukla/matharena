@@ -44,7 +44,8 @@ dependencies = [
     "PyMuPDF>=1.26.7",
     "flask>=3.1.0",
     "axiom-axle>=1.1.0",
-    "aristotlelib>=1.0.1"
+    "aristotlelib>=1.0.1",
+    "harness-wrapper"
 ]
 
 [build-system]
@@ -52,7 +53,10 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.uv.workspace]
-members = ["website"]
+members = ["harness_wrapper"]
+
+[tool.uv.sources]
+harness-wrapper = { workspace = true }
 
 [tool.black]
 line-length = 120

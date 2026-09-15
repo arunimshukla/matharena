@@ -1,0 +1,823 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Harness trace viewer</title>
+  <style>
+    :root {
+      --canvas: #f3f2ed;
+      --surface: #ffffff;
+      --surface-soft: #f8f8f4;
+      --ink: #17221f;
+      --muted: #68736f;
+      --faint: #98a19e;
+      --line: #dfe3dc;
+      --line-strong: #cbd2ca;
+      --accent: #126b5f;
+      --accent-soft: #dff3ec;
+      --blue: #4e68d8;
+      --blue-soft: #e8ecff;
+      --amber: #9a6500;
+      --amber-soft: #fff1ce;
+      --red: #b9433c;
+      --red-soft: #fde9e6;
+      --terminal: #17211f;
+      --terminal-ink: #dfe9e5;
+      --shadow: 0 1px 2px rgba(20, 35, 30, .04), 0 12px 36px rgba(20, 35, 30, .05);
+      --radius: 18px;
+    }
+
+    * { box-sizing: border-box; }
+    html { min-width: 320px; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--canvas);
+      font: 14px/1.5 Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    button, input, select { font: inherit; }
+    button { color: inherit; }
+    .hidden { display: none !important; }
+    .muted { color: var(--muted); }
+    .eyebrow {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 750;
+      letter-spacing: .09em;
+      text-transform: uppercase;
+    }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      border-bottom: 1px solid rgba(203, 210, 202, .84);
+      background: rgba(243, 242, 237, .92);
+      backdrop-filter: blur(18px);
+    }
+    .topbar-inner {
+      width: min(1420px, 100%);
+      min-height: 68px;
+      margin: 0 auto;
+      padding: 14px 24px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .brand { display: flex; align-items: center; gap: 11px; }
+    .brand-mark {
+      width: 38px;
+      height: 38px;
+      position: relative;
+      flex: 0 0 auto;
+      border-radius: 12px 12px 12px 4px;
+      background: var(--accent);
+      box-shadow: inset 0 -8px 18px rgba(0, 0, 0, .08);
+    }
+    .brand-mark::before,
+    .brand-mark::after {
+      content: "";
+      position: absolute;
+      left: 10px;
+      width: 18px;
+      height: 3px;
+      border-radius: 3px;
+      background: #efffe8;
+      box-shadow: 0 6px 0 #efffe8;
+    }
+    .brand-mark::before { top: 11px; }
+    .brand-mark::after { top: 23px; width: 10px; box-shadow: none; opacity: .72; }
+    .brand h1 { margin: 0; font-size: 16px; line-height: 1.15; letter-spacing: -.01em; }
+    .brand p { margin: 2px 0 0; color: var(--muted); font-size: 12px; }
+    .privacy {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .privacy::before {
+      content: "";
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #39a76f;
+      box-shadow: 0 0 0 4px rgba(57, 167, 111, .13);
+    }
+    .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      min-height: 36px;
+      padding: 7px 12px;
+      border: 1px solid var(--line-strong);
+      border-radius: 10px;
+      background: var(--surface);
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .button:hover { border-color: var(--accent); color: var(--accent); }
+    .button.primary { border-color: var(--accent); background: var(--accent); color: white; }
+    .button.primary:hover { background: #0e5a50; }
+
+    main { width: min(1420px, 100%); margin: 0 auto; padding: 24px 24px 48px; }
+    .card {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+      box-shadow: var(--shadow);
+    }
+
+    .drop-zone {
+      min-height: 460px;
+      display: grid;
+      place-items: center;
+      padding: 40px;
+      border: 1px dashed var(--line-strong);
+      border-radius: 24px;
+      background: rgba(255, 255, 255, .55);
+      text-align: center;
+      transition: .15s ease;
+    }
+    .drop-zone.dragging {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+      transform: scale(.997);
+    }
+    .drop-content { max-width: 460px; }
+    .drop-icon {
+      width: 70px;
+      height: 70px;
+      margin: 0 auto 22px;
+      display: grid;
+      place-items: center;
+      border-radius: 22px 22px 22px 7px;
+      color: var(--accent);
+      background: var(--accent-soft);
+      font-size: 27px;
+      font-weight: 800;
+    }
+    .drop-zone h2 { margin: 0; font-size: 28px; letter-spacing: -.035em; }
+    .drop-zone p { margin: 9px 0 22px; color: var(--muted); }
+    .drop-note { margin-top: 15px; color: var(--faint); font-size: 11px; }
+
+    .app-layout { display: grid; grid-template-columns: 270px minmax(0, 1fr); gap: 18px; }
+    .session-panel { align-self: start; position: sticky; top: 92px; overflow: hidden; }
+    .panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 16px 17px;
+      border-bottom: 1px solid var(--line);
+    }
+    .panel-head h2 { margin: 0; font-size: 14px; }
+    .count-badge {
+      min-width: 24px;
+      padding: 2px 7px;
+      border-radius: 999px;
+      background: var(--surface-soft);
+      color: var(--muted);
+      text-align: center;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .session-list { max-height: calc(100vh - 172px); overflow: auto; padding: 7px; }
+    .session-item {
+      width: 100%;
+      padding: 11px 10px;
+      border: 1px solid transparent;
+      border-radius: 11px;
+      background: transparent;
+      text-align: left;
+      cursor: pointer;
+    }
+    .session-item:hover { background: var(--surface-soft); }
+    .session-item.active { border-color: #b9ddd2; background: var(--accent-soft); }
+    .session-name {
+      display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 12px;
+      font-weight: 750;
+    }
+    .session-meta { display: flex; gap: 6px; margin-top: 4px; color: var(--muted); font-size: 10px; }
+    .session-meta span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    .workspace { min-width: 0; }
+    .workspace-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 18px;
+      margin: 3px 2px 17px;
+    }
+    .workspace-head h2 { margin: 3px 0 0; font-size: 27px; line-height: 1.2; letter-spacing: -.035em; }
+    .workspace-head p { margin: 5px 0 0; color: var(--muted); font-size: 12px; }
+    .file-warning {
+      margin: 0 0 14px;
+      padding: 10px 12px;
+      border: 1px solid #efd49d;
+      border-radius: 10px;
+      background: var(--amber-soft);
+      color: var(--amber);
+      font-size: 12px;
+    }
+    .metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 15px; }
+    .metric { min-width: 0; padding: 15px 16px; }
+    .metric span { display: block; color: var(--muted); font-size: 10px; letter-spacing: .07em; text-transform: uppercase; }
+    .metric strong { display: block; margin-top: 4px; overflow: hidden; text-overflow: ellipsis; font-size: 20px; letter-spacing: -.025em; }
+    .metric small { display: block; margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--faint); font-size: 10px; }
+
+    .timeline-card { overflow: hidden; }
+    .toolbar {
+      display: grid;
+      grid-template-columns: minmax(180px, 1fr) 180px auto;
+      gap: 9px;
+      align-items: center;
+      padding: 13px 15px;
+      border-bottom: 1px solid var(--line);
+      background: var(--surface-soft);
+    }
+    .search-wrap { position: relative; }
+    .search-wrap::before {
+      content: "⌕";
+      position: absolute;
+      left: 11px;
+      top: 5px;
+      color: var(--faint);
+      font-size: 20px;
+    }
+    .field {
+      width: 100%;
+      height: 36px;
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      outline: none;
+      background: white;
+      color: var(--ink);
+    }
+    input.field { padding: 7px 10px 7px 35px; }
+    select.field { padding: 7px 28px 7px 10px; }
+    .field:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(18, 107, 95, .1); }
+    .showing { color: var(--muted); font-size: 11px; white-space: nowrap; }
+    .timeline { padding: 7px 18px 12px; }
+    .event {
+      position: relative;
+      padding: 12px 0 0 32px;
+    }
+    .event::before {
+      content: "";
+      position: absolute;
+      left: 10px;
+      top: 0;
+      bottom: -12px;
+      width: 1px;
+      background: var(--line);
+    }
+    .event:last-child::before { bottom: auto; height: 29px; }
+    .event-dot {
+      position: absolute;
+      z-index: 1;
+      left: 5px;
+      top: 24px;
+      width: 11px;
+      height: 11px;
+      border: 3px solid white;
+      border-radius: 50%;
+      background: var(--faint);
+      box-shadow: 0 0 0 1px var(--line-strong);
+    }
+    .event.message .event-dot, .event.answer .event-dot { background: var(--blue); }
+    .event.tool .event-dot { background: var(--accent); }
+    .event.reasoning .event-dot { background: #8a65b5; }
+    .event.usage .event-dot { background: var(--amber); }
+    .event.error .event-dot { background: var(--red); }
+    .event-card {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: white;
+      overflow: hidden;
+    }
+    .event-card[open] { border-color: var(--line-strong); }
+    .event-summary {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 12px;
+      padding: 11px 13px;
+      cursor: pointer;
+      list-style: none;
+    }
+    .event-summary::-webkit-details-marker { display: none; }
+    .event-summary:hover { background: var(--surface-soft); }
+    .event-main { min-width: 0; }
+    .event-line { display: flex; align-items: center; gap: 7px; min-width: 0; }
+    .type-pill {
+      flex: 0 0 auto;
+      padding: 2px 7px;
+      border-radius: 6px;
+      background: var(--surface-soft);
+      color: var(--muted);
+      font: 700 10px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    .event.tool .type-pill { background: var(--accent-soft); color: var(--accent); }
+    .event.message .type-pill, .event.answer .type-pill { background: var(--blue-soft); color: var(--blue); }
+    .event.error .type-pill { background: var(--red-soft); color: var(--red); }
+    .event-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 700; }
+    .event-preview { margin-top: 5px; overflow: hidden; color: var(--muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+    .event-time { color: var(--faint); font: 10px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: nowrap; }
+    .event-body { border-top: 1px solid var(--line); }
+    .content-block { margin: 0; padding: 14px; overflow: auto; color: var(--terminal-ink); background: var(--terminal); font: 11px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .detail-grid { display: flex; flex-wrap: wrap; gap: 7px; padding: 10px 13px; background: var(--surface-soft); }
+    .detail-chip { padding: 3px 7px; border: 1px solid var(--line); border-radius: 7px; color: var(--muted); background: white; font-size: 10px; }
+    .empty-filter { padding: 64px 24px; text-align: center; color: var(--muted); }
+
+    @media (max-width: 880px) {
+      .app-layout { grid-template-columns: 1fr; }
+      .session-panel { position: static; }
+      .session-list { max-height: 180px; }
+      .metrics { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 620px) {
+      .topbar-inner, main { padding-left: 14px; padding-right: 14px; }
+      .privacy { display: none; }
+      .topbar .button { margin-left: auto; }
+      .drop-zone { min-height: 400px; padding: 25px; }
+      .drop-zone h2 { font-size: 23px; }
+      .workspace-head { display: block; }
+      .workspace-head .button { margin-top: 12px; }
+      .toolbar { grid-template-columns: 1fr; }
+      .showing { padding: 0 2px; }
+      .event-summary { grid-template-columns: 1fr; gap: 4px; }
+      .event-time { padding-left: 0; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true"></div>
+        <div>
+          <h1>Harness traces</h1>
+          <p>Local session explorer</p>
+        </div>
+      </div>
+      <div class="privacy">Files stay in this browser</div>
+      <button class="button hidden" id="top-open" type="button">＋ Add traces</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="drop-zone" id="drop-zone" aria-labelledby="drop-title">
+      <div class="drop-content">
+        <div class="drop-icon" aria-hidden="true">↧</div>
+        <div class="eyebrow">Trace explorer</div>
+        <h2 id="drop-title">Make an agent run readable</h2>
+        <p>Drop JSONL traces here to inspect messages, reasoning, tool activity, errors, and usage in one timeline.</p>
+        <button class="button primary" id="empty-open" type="button">Choose trace files</button>
+        <div class="drop-note">Supports one or more <strong>.jsonl</strong> or <strong>.json</strong> files · nothing is uploaded</div>
+      </div>
+    </section>
+
+    <section class="app-layout hidden" id="viewer" aria-live="polite">
+      <aside class="card session-panel">
+        <div class="panel-head">
+          <h2>Sessions</h2>
+          <span class="count-badge" id="session-count">0</span>
+        </div>
+        <div class="session-list" id="session-list"></div>
+      </aside>
+
+      <div class="workspace">
+        <div class="workspace-head">
+          <div>
+            <div class="eyebrow" id="session-harness">Trace session</div>
+            <h2 id="session-title">—</h2>
+            <p id="session-subtitle"></p>
+          </div>
+          <button class="button" id="copy-session" type="button">Copy session ID</button>
+        </div>
+        <div class="file-warning hidden" id="file-warning"></div>
+
+        <div class="metrics">
+          <div class="card metric"><span>Events</span><strong id="metric-events">0</strong><small id="metric-duration">—</small></div>
+          <div class="card metric"><span>Tokens</span><strong id="metric-tokens">0</strong><small id="metric-token-split">—</small></div>
+          <div class="card metric"><span>Tool calls</span><strong id="metric-tools">0</strong><small id="metric-errors">No errors</small></div>
+          <div class="card metric"><span>Cost</span><strong id="metric-cost">—</strong><small id="metric-model">Not reported</small></div>
+        </div>
+
+        <section class="card timeline-card" aria-label="Event timeline">
+          <div class="toolbar">
+            <div class="search-wrap">
+              <input class="field" id="search" type="search" placeholder="Search events…" aria-label="Search trace events">
+            </div>
+            <select class="field" id="type-filter" aria-label="Filter by event type">
+              <option value="">All event types</option>
+            </select>
+            <div class="showing" id="showing">0 events</div>
+          </div>
+          <div class="timeline" id="timeline"></div>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <input id="file-input" type="file" accept=".jsonl,.json,application/json" multiple hidden>
+  <script id="initial-trace" type="application/json">{}</script>
+
+  <script>
+    "use strict";
+
+    const state = { sessions: [], activeKey: null, query: "", type: "" };
+    const elements = Object.fromEntries([
+      "drop-zone", "viewer", "top-open", "empty-open", "file-input", "session-list",
+      "session-count", "session-harness", "session-title", "session-subtitle", "file-warning",
+      "metric-events", "metric-duration", "metric-tokens", "metric-token-split", "metric-tools",
+      "metric-errors", "metric-cost", "metric-model", "copy-session", "search", "type-filter",
+      "showing", "timeline"
+    ].map(id => [id, document.getElementById(id)]));
+
+    const formatNumber = value => new Intl.NumberFormat().format(value || 0);
+
+    function formatCost(value) {
+      if (!Number.isFinite(value) || value === 0) return value === 0 ? "$0.00" : "—";
+      return value < .01 ? `$${value.toFixed(4)}` : `$${value.toFixed(2)}`;
+    }
+
+    function formatTime(value) {
+      const date = new Date(value);
+      if (Number.isNaN(date.valueOf())) return "No timestamp";
+      return new Intl.DateTimeFormat(undefined, {
+        hour: "2-digit", minute: "2-digit", second: "2-digit", fractionalSecondDigits: 3
+      }).format(date);
+    }
+
+    function formatDate(value) {
+      const date = new Date(value);
+      if (Number.isNaN(date.valueOf())) return "Unknown date";
+      return new Intl.DateTimeFormat(undefined, {
+        year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit"
+      }).format(date);
+    }
+
+    function formatDuration(milliseconds) {
+      if (!Number.isFinite(milliseconds) || milliseconds < 0) return "Duration unavailable";
+      if (milliseconds < 1000) return `${Math.round(milliseconds)} ms elapsed`;
+      const seconds = milliseconds / 1000;
+      if (seconds < 60) return `${seconds.toFixed(seconds < 10 ? 1 : 0)} s elapsed`;
+      const minutes = Math.floor(seconds / 60);
+      return `${minutes}m ${Math.round(seconds % 60)}s elapsed`;
+    }
+
+    function textValue(value, compact = false) {
+      if (value === null || value === undefined) return "";
+      if (typeof value === "string") return value;
+      try { return JSON.stringify(value, null, compact ? 0 : 2); }
+      catch (_) { return String(value); }
+    }
+
+    function eventCategory(type) {
+      const normalized = type.toLowerCase();
+      if (normalized.includes("error") || normalized.includes("fail")) return "error";
+      if (normalized.includes("tool") || normalized.includes("file_change")) return "tool";
+      if (normalized.includes("reason")) return "reasoning";
+      if (normalized.includes("usage") || normalized.includes("token")) return "usage";
+      if (normalized.includes("answer")) return "answer";
+      if (normalized.includes("message") || normalized.includes("reply")) return "message";
+      return "other";
+    }
+
+    function eventTitle(event) {
+      if (event.tool_name) return event.tool_name;
+      if (event.role) return `${event.role} ${event.type}`;
+      if (event.type === "usage") return "Token usage update";
+      if (event.type === "session") return "Session started";
+      return event.type.replaceAll("_", " ").replaceAll(".", " · ");
+    }
+
+    function normalizeRecords(value) {
+      if (Array.isArray(value)) return value;
+      if (value && Array.isArray(value.records)) return value.records;
+      return [value];
+    }
+
+    async function readTraceFile(file) {
+      const source = await file.text();
+      const lines = source.split(/\r?\n/).filter(line => line.trim());
+      let records = [];
+      let invalid = 0;
+
+      if (lines.length === 1) {
+        try { records = normalizeRecords(JSON.parse(lines[0])); }
+        catch (_) { invalid = 1; }
+      } else {
+        for (const line of lines) {
+          try { records.push(JSON.parse(line)); }
+          catch (_) { invalid += 1; }
+        }
+      }
+
+      const groups = new Map();
+      for (const [index, record] of records.entries()) {
+        if (!record || typeof record !== "object") { invalid += 1; continue; }
+        const event = record.event && typeof record.event === "object" ? record.event : record;
+        if (!event.type) { invalid += 1; continue; }
+        const sessionId = String(record.session_id || record.sessionId || file.name.replace(/\.(jsonl|json)$/i, ""));
+        const key = `${file.name}::${sessionId}`;
+        if (!groups.has(key)) {
+          groups.set(key, {
+            key, sessionId, filename: file.name, harness: record.harness || "unknown harness",
+            model: record.model || "", metadata: record.trace_metadata || {}, events: [], invalid: 0
+          });
+        }
+        const group = groups.get(key);
+        group.harness = record.harness || group.harness;
+        group.model = record.model || group.model;
+        group.metadata = record.trace_metadata || group.metadata;
+        group.events.push({ ...event, _record: record, _index: index });
+      }
+
+      if (groups.size === 0) {
+        groups.set(`${file.name}::empty`, {
+          key: `${file.name}::empty`, sessionId: file.name, filename: file.name,
+          harness: "Unreadable trace", model: "", metadata: {}, events: [], invalid
+        });
+      } else if (invalid) {
+        groups.values().next().value.invalid = invalid;
+      }
+      return [...groups.values()];
+    }
+
+    async function loadFiles(fileList) {
+      const files = [...fileList].filter(file => /\.(jsonl|json)$/i.test(file.name));
+      if (!files.length) return;
+      const loaded = (await Promise.all(files.map(readTraceFile))).flat();
+      const existingKeys = new Set(state.sessions.map(session => session.key));
+      for (const session of loaded) {
+        let key = session.key;
+        let suffix = 2;
+        while (existingKeys.has(key)) key = `${session.key}::${suffix++}`;
+        session.key = key;
+        existingKeys.add(key);
+        state.sessions.push(session);
+      }
+      state.activeKey = loaded[0]?.key || state.activeKey;
+      elements["drop-zone"].classList.add("hidden");
+      elements.viewer.classList.remove("hidden");
+      elements["top-open"].classList.remove("hidden");
+      render();
+    }
+
+    function activeSession() {
+      return state.sessions.find(session => session.key === state.activeKey) || state.sessions[0];
+    }
+
+    function usageTotals(events) {
+      return events.reduce((totals, event) => {
+        const usage = event.usage || (event.type === "usage" && event.content && typeof event.content === "object" ? event.content : {});
+        totals.input += Number(usage.input_tokens ?? usage.prompt_tokens ?? 0) || 0;
+        totals.output += Number(usage.output_tokens ?? usage.completion_tokens ?? 0) || 0;
+        totals.cacheRead += Number(usage.cache_read_tokens ?? 0) || 0;
+        totals.cacheWrite += Number(usage.cache_write_tokens ?? 0) || 0;
+        totals.cost += Number(usage.cost_usd ?? 0) || 0;
+        totals.hasCost ||= usage.cost_usd !== null && usage.cost_usd !== undefined;
+        return totals;
+      }, { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0, hasCost: false });
+    }
+
+    function renderSessions() {
+      elements["session-list"].replaceChildren();
+      elements["session-count"].textContent = state.sessions.length;
+      for (const session of state.sessions) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = `session-item${session.key === state.activeKey ? " active" : ""}`;
+        const name = document.createElement("span");
+        name.className = "session-name";
+        name.textContent = session.sessionId;
+        const meta = document.createElement("span");
+        meta.className = "session-meta";
+        const harness = document.createElement("span");
+        harness.textContent = session.harness;
+        const count = document.createElement("span");
+        count.textContent = `· ${session.events.length} events`;
+        meta.append(harness, count);
+        button.append(name, meta);
+        button.addEventListener("click", () => {
+          state.activeKey = session.key;
+          state.query = "";
+          state.type = "";
+          elements.search.value = "";
+          render();
+        });
+        elements["session-list"].append(button);
+      }
+    }
+
+    function renderHeader(session) {
+      const timestamps = session.events.map(event => new Date(event.timestamp).valueOf()).filter(Number.isFinite);
+      const first = timestamps.length ? Math.min(...timestamps) : NaN;
+      const last = timestamps.length ? Math.max(...timestamps) : NaN;
+      const totals = usageTotals(session.events);
+      const tools = session.events.filter(event => eventCategory(event.type) === "tool").length;
+      const errors = session.events.filter(event => eventCategory(event.type) === "error").length;
+
+      elements["session-harness"].textContent = session.harness;
+      elements["session-title"].textContent = session.sessionId;
+      elements["session-subtitle"].textContent = `${session.filename} · ${formatDate(first)}`;
+      elements["metric-events"].textContent = formatNumber(session.events.length);
+      elements["metric-duration"].textContent = formatDuration(last - first);
+      elements["metric-tokens"].textContent = formatNumber(totals.input + totals.output);
+      elements["metric-token-split"].textContent = `${formatNumber(totals.input)} in · ${formatNumber(totals.output)} out`;
+      elements["metric-tools"].textContent = formatNumber(tools);
+      elements["metric-errors"].textContent = errors ? `${formatNumber(errors)} error${errors === 1 ? "" : "s"}` : "No errors";
+      elements["metric-cost"].textContent = totals.hasCost ? formatCost(totals.cost) : "—";
+      elements["metric-model"].textContent = session.model || "Not reported";
+      elements["file-warning"].textContent = `${session.invalid} malformed line${session.invalid === 1 ? " was" : "s were"} skipped while loading this file.`;
+      elements["file-warning"].classList.toggle("hidden", !session.invalid);
+    }
+
+    function renderTypeOptions(session) {
+      const previous = state.type;
+      const types = [...new Set(session.events.map(event => event.type))].sort();
+      elements["type-filter"].replaceChildren(new Option("All event types", ""));
+      for (const type of types) elements["type-filter"].add(new Option(type, type));
+      state.type = types.includes(previous) ? previous : "";
+      elements["type-filter"].value = state.type;
+    }
+
+    function eventMatches(event) {
+      if (state.type && event.type !== state.type) return false;
+      if (!state.query) return true;
+      const haystack = [event.type, event.type.replaceAll("_", " "), eventTitle(event),
+        event.role, event.tool_name, event.tool_call_id,
+        textValue(event.content, true), textValue(event.metadata, true)].join(" ").toLowerCase();
+      return haystack.includes(state.query.toLowerCase());
+    }
+
+    function createChip(label, value) {
+      const chip = document.createElement("span");
+      chip.className = "detail-chip";
+      chip.textContent = `${label}: ${value}`;
+      return chip;
+    }
+
+    function renderEvent(event) {
+      const category = eventCategory(event.type);
+      const article = document.createElement("article");
+      article.className = `event ${category}`;
+      const dot = document.createElement("span");
+      dot.className = "event-dot";
+      dot.setAttribute("aria-hidden", "true");
+
+      const details = document.createElement("details");
+      details.className = "event-card";
+      const summary = document.createElement("summary");
+      summary.className = "event-summary";
+      const main = document.createElement("div");
+      main.className = "event-main";
+      const line = document.createElement("div");
+      line.className = "event-line";
+      const type = document.createElement("span");
+      type.className = "type-pill";
+      type.textContent = event.type;
+      const title = document.createElement("span");
+      title.className = "event-title";
+      title.textContent = eventTitle(event);
+      line.append(type, title);
+      const preview = document.createElement("div");
+      preview.className = "event-preview";
+      preview.textContent = textValue(event.content, true).replace(/\s+/g, " ") || "No content";
+      main.append(line, preview);
+      const time = document.createElement("time");
+      time.className = "event-time";
+      time.dateTime = event.timestamp || "";
+      time.textContent = formatTime(event.timestamp);
+      summary.append(main, time);
+
+      const body = document.createElement("div");
+      body.className = "event-body";
+      const content = document.createElement("pre");
+      content.className = "content-block";
+      content.textContent = textValue(event.content) || "No content";
+      const grid = document.createElement("div");
+      grid.className = "detail-grid";
+      if (event.role) grid.append(createChip("role", event.role));
+      if (event.tool_name) grid.append(createChip("tool", event.tool_name));
+      if (event.tool_call_id) grid.append(createChip("call", event.tool_call_id));
+      if (event.usage) {
+        const total = Number(event.usage.total_tokens ?? 0) ||
+          (Number(event.usage.input_tokens ?? 0) + Number(event.usage.output_tokens ?? 0));
+        grid.append(createChip("tokens", formatNumber(total)));
+      }
+      const metadataKeys = event.metadata && typeof event.metadata === "object" ? Object.keys(event.metadata) : [];
+      if (metadataKeys.length) grid.append(createChip("metadata", metadataKeys.join(", ")));
+      body.append(content);
+      if (grid.childElementCount) body.append(grid);
+      details.append(summary, body);
+      article.append(dot, details);
+      return article;
+    }
+
+    function renderTimeline(session) {
+      const visible = session.events.filter(eventMatches);
+      elements.showing.textContent = `Showing ${formatNumber(visible.length)} of ${formatNumber(session.events.length)}`;
+      elements.timeline.replaceChildren();
+      if (!visible.length) {
+        const empty = document.createElement("div");
+        empty.className = "empty-filter";
+        empty.textContent = "No events match this filter.";
+        elements.timeline.append(empty);
+        return;
+      }
+      const fragment = document.createDocumentFragment();
+      for (const event of visible) fragment.append(renderEvent(event));
+      elements.timeline.append(fragment);
+    }
+
+    function render() {
+      const session = activeSession();
+      if (!session) return;
+      renderSessions();
+      renderHeader(session);
+      renderTypeOptions(session);
+      renderTimeline(session);
+    }
+
+    for (const id of ["empty-open", "top-open"]) {
+      elements[id].addEventListener("click", () => elements["file-input"].click());
+    }
+    elements["file-input"].addEventListener("change", event => {
+      loadFiles(event.target.files);
+      event.target.value = "";
+    });
+    elements.search.addEventListener("input", event => {
+      state.query = event.target.value.trim();
+      renderTimeline(activeSession());
+    });
+    elements["type-filter"].addEventListener("change", event => {
+      state.type = event.target.value;
+      renderTimeline(activeSession());
+    });
+    elements["copy-session"].addEventListener("click", async () => {
+      const session = activeSession();
+      if (!session) return;
+      try {
+        await navigator.clipboard.writeText(session.sessionId);
+        elements["copy-session"].textContent = "Copied";
+        setTimeout(() => { elements["copy-session"].textContent = "Copy session ID"; }, 1200);
+      } catch (_) {
+        elements["copy-session"].textContent = "Copy unavailable";
+      }
+    });
+    document.addEventListener("keydown", event => {
+      if (event.key === "/" && document.activeElement !== elements.search && !elements.viewer.classList.contains("hidden")) {
+        event.preventDefault();
+        elements.search.focus();
+      }
+    });
+    for (const name of ["dragenter", "dragover"]) {
+      document.addEventListener(name, event => {
+        event.preventDefault();
+        elements["drop-zone"].classList.add("dragging");
+      });
+    }
+    for (const name of ["dragleave", "drop"]) {
+      document.addEventListener(name, event => {
+        event.preventDefault();
+        elements["drop-zone"].classList.remove("dragging");
+      });
+    }
+    document.addEventListener("drop", event => loadFiles(event.dataTransfer.files));
+
+    const initialPayload = JSON.parse(document.getElementById("initial-trace").textContent);
+    if (Array.isArray(initialPayload.records)) {
+      const embedded = initialPayload.session || {};
+      const sessionId = String(embedded.session_id || "trace");
+      if (initialPayload.records.length) {
+        const source = initialPayload.records.map(record => JSON.stringify(record)).join("\n");
+        loadFiles([new File([source], `${sessionId}.jsonl`, { type: "application/x-ndjson" })]);
+      } else {
+        state.sessions.push({
+          key: `embedded::${sessionId}`, sessionId, filename: `${sessionId}.jsonl`,
+          harness: embedded.harness || "unknown harness", model: embedded.model || "",
+          metadata: embedded.trace_metadata || {}, events: [], invalid: 0
+        });
+        state.activeKey = state.sessions[0].key;
+        elements["drop-zone"].classList.add("hidden");
+        elements.viewer.classList.remove("hidden");
+        elements["top-open"].classList.remove("hidden");
+        render();
+      }
+    }
+  </script>
+</body>
+</html>

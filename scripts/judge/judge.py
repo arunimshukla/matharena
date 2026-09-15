@@ -1,4 +1,5 @@
 import argparse
+import csv
 import json
 import os
 from pathlib import Path
@@ -11,6 +12,7 @@ from loguru import logger
 from matharena.json_zst import OUTPUT_JSON_SUFFIX, dump_json_zst, load_json_zst, output_json_stem
 from matharena.solvers.judges import JudgePool
 from matharena.tools.code_execution import execute_code
+from matharena.utils import run_limit_exceeded
 
 
 def load_original_statement(dataset_path, problem_idx):
@@ -22,7 +24,29 @@ def load_original_statement(dataset_path, problem_idx):
     return path.read_text(encoding="utf-8")
 
 
-def load_grading_map(dataset_path, split="train"):
+def load_grading_map(dataset_path, split="train", answer_judging=False):
+    if answer_judging:
+        if Path(dataset_path).is_dir():
+            with (Path(dataset_path) / "answers.csv").open(encoding="utf-8", newline="") as handle:
+                rows = list(csv.DictReader(handle))
+        else:
+            rows = load_dataset(dataset_path, split=split).to_list()
+        grading_map = {}
+        for row in rows:
+            problem_idx = int(row.get("problem_idx", row.get("id")))
+            answer = row.get("answer")
+            if answer is None or not str(answer).strip() or str(answer).startswith("hash:"):
+                raise ValueError(f"Problem {problem_idx} needs a non-empty, unhashed reference answer.")
+            if problem_idx in grading_map:
+                raise ValueError(f"Duplicate problem ID {problem_idx} in answer dataset.")
+            grading_map[problem_idx] = {
+                "id": problem_idx,
+                "points": 1,
+                "scheme": "Compare the final answer with the reference; 1 for correct, 0 otherwise.",
+                "ground_truth_solutions": [str(answer)],
+            }
+        return grading_map
+
     grading_path = Path(dataset_path) / "grading_scheme.json"
     if os.path.exists(dataset_path) and grading_path.exists():
         with open(grading_path, "r", encoding="utf-8") as f:
@@ -81,6 +105,10 @@ def find_judgment_slot_for_judge(run_data, run_idx, judge_id):
 def build_judgment_entry(judge_response, max_points, scheme_text, judge_id, judge_points_max):
     if judge_response.points is None:
         return None
+    if judge_points_max <= 0 or max_points <= 0:
+        raise ValueError("Judge point scales must be positive.")
+    if not 0 <= judge_response.points <= judge_points_max:
+        return None
 
     raw_points = judge_response.points
     points = raw_points if abs(max_points - judge_points_max) < 1e-9 else raw_points * max_points / judge_points_max
@@ -91,6 +119,7 @@ def build_judgment_entry(judge_response, max_points, scheme_text, judge_id, judg
         "judge_id": judge_id,
         "cost": judge_response.detailed_cost,
         "additional_info": judge_response.additional_info,
+        "history": judge_response.history,
         "details": [
             {
                     "title": "Overall",
@@ -107,6 +136,10 @@ def recompute_correct_and_pass_at_1(run_data):
     n = len(run_data["messages"])
     correct = []
     for i in range(n):
+        costs = run_data.get("detailed_costs", [])
+        if i < len(costs) and run_limit_exceeded(costs[i]):
+            correct.append(0)
+            continue
         vals = []
         for judge in run_data.get("judgment", []):
             if not isinstance(judge, list) or i >= len(judge) or not isinstance(judge[i], dict):
@@ -144,12 +177,13 @@ def main():
     with open(f"{args.comp_configs_dir}/{args.comp}.yaml", "r", encoding="utf-8") as f:
         comp_cfg = yaml.safe_load(f)
 
-    judge_refs = comp_cfg["judge_configs"]
+    judge_refs = args.judge_configs or comp_cfg["judge_configs"]
+    answer_judging = comp_cfg.get("grading") == "answer_judge"
 
     dataset_path = comp_cfg.get("dataset_path")
     split = comp_cfg.get("split", "train")
 
-    grading_map = load_grading_map(dataset_path, split=split)
+    grading_map = load_grading_map(dataset_path, split=split, answer_judging=answer_judging)
 
     output_root = Path(args.output_dir) / args.comp
 
@@ -163,6 +197,8 @@ def main():
         with open(f"{args.configs_dir}/{judge_ref}.yaml", "r", encoding="utf-8") as f:
             full_config = yaml.safe_load(f)
         judge_points_max = full_config.get("judge_points_max", 7)
+        if answer_judging and judge_points_max != 1:
+            raise ValueError("Answer judging requires a binary judge config with judge_points_max: 1.")
 
         with open(f"{args.configs_dir}/{full_config['scaffold_config']}.yaml", "r", encoding="utf-8") as f:
             judge_cfg = yaml.safe_load(f)
@@ -175,6 +211,7 @@ def main():
         for key in full_config.get("override", {}):
             judge_cfg[key] = full_config["override"][key]
 
+        judge_cfg["judge_points_max"] = judge_points_max
         judge_pool = JudgePool(
             solver_config=judge_cfg
         )
@@ -191,6 +228,8 @@ def main():
                 continue
 
             record = grading_map.get(problem_idx)
+            if record is None:
+                raise ValueError(f"No grading reference for problem {problem_idx} in {dataset_path}.")
 
             ensure_judgment_shape(run_data, slot)
 
@@ -204,7 +243,7 @@ def main():
             else:
                 scheme_text = str(scheme)
 
-            proofs = record.get("ground_truth_proofs", [])
+            proofs = record.get("ground_truth_solutions") or record.get("ground_truth_proofs", [])
             original_problem_statement = (
                 record.get("original_problem_statement")
                 or load_original_statement(dataset_path, problem_idx)
@@ -213,12 +252,27 @@ def main():
 
             problem_text = run_data.get("problem")
             for run_idx, conversation in enumerate(run_data.get("messages", [])):
+                costs = run_data.get("detailed_costs", [])
+                if run_idx < len(costs) and run_limit_exceeded(costs[run_idx]):
+                    recompute_correct_and_pass_at_1(run_data)
+                    dump_json_zst(run_data, path, indent=4, ensure_ascii=False)
+                    continue
                 existing_slot = find_judgment_slot_for_judge(run_data, run_idx, judge_ref)
                 if existing_slot is not None and not args.redo:
                     continue
 
                 write_slot = existing_slot if existing_slot is not None else slot
-                student_answer = conversation[-1]["content"]
+                final = conversation[-1] if isinstance(conversation, list) and conversation else {}
+                if not (
+                    isinstance(final, dict) and final.get("role") == "assistant"
+                    and final.get("type", "response") == "response"
+                    and isinstance(final.get("content"), str)
+                ):
+                    raise ValueError(
+                        f"Cannot judge {path} run {run_idx + 1}: no final assistant response. "
+                        "Repair or rerun this incomplete attempt before grading."
+                    )
+                student_answer = final["content"]
 
                 queries.append(
                     (
@@ -251,9 +305,12 @@ def main():
             ensure_judgment_shape(run_data, write_slot)
             parsed = build_judgment_entry(judge_response, max_points, scheme_text, judge_id, judge_points_max)
             if parsed is None:
-                logger.warning(f"Failed to parse judge output for {path} run {run_idx} slot {write_slot}. Skipping. You should rerun the command to retry this run.")
+                logger.warning(f"No valid judge score for {path} run {run_idx + 1} slot {write_slot} after 3 attempts; leaving this judgment pending.")
                 continue
             run_data["judgment"][write_slot][run_idx] = parsed
+            if answer_judging:
+                # Keep the actual response instead of inventing a parser-extracted answer.
+                run_data["answers"][run_idx] = queries[judge_response.idx][1]["student_answer"]
             recompute_correct_and_pass_at_1(run_data)
             dump_json_zst(run_data, path, indent=4, ensure_ascii=False)
             touched.add(path)

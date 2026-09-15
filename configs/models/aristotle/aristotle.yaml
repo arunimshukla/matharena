@@ -2,11 +2,12 @@ model: aristotle
 api: aristotle
 concurrent_requests: 4
 polling_interval_seconds: 30
-lean_environment_override: lean-4.28.0
-aristotle_toolchain: leanprover/lean4:v4.28.0
-aristotle_mathlib_revision: v4.28.0
+lean_environment_override: lean-4.31.0
+aristotle_toolchain: leanprover/lean4:v4.31.0
+aristotle_mathlib_revision: v4.31.0
 human_readable_id: Aristotle
 other_params:
+  exclude_from_expected_performance: true
   open: false
   creator: Harmonic
 custom_instructions:

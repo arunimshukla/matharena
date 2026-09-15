@@ -1,0 +1,12 @@
+model: meta/muse-spark-1.1
+api: openrouter
+concurrent_requests: 64
+stream_reassemble_chat_completions: true
+read_cost: 1.25
+cache_read_cost: 0.15
+write_cost: 4.25
+human_readable_id: Muse Spark 1.1
+date: "2026-07-11"
+other_params:
+  open: false
+  creator: Meta AI

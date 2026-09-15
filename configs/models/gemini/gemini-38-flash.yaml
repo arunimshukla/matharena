@@ -1,0 +1,25 @@
+model: gemini-3.8-flash
+api: google
+# Antigravity CLI supplies the agent loop; GOOGLE_API_KEY pays for Gemini API usage.
+harness: gravity
+harness_version: "1.1.26"
+concurrent_requests: 16
+max_tokens: 65536
+cache_read_cost: 0.075
+read_cost: 0.75
+tool_choice: auto
+write_cost: 3.75
+human_readable_id: Gemini 3.8 Flash
+date: "2026-09-02"
+reasoning_effort: high
+other_params:
+  open: false
+  creator: Google
+
+harness_config:
+  auth: api
+  container_executable: agy
+  cpu_limit: 4
+  memory_gb: 12
+  pids_limit: 768
+  tmpfs_size: 1g

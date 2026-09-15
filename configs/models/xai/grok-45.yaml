@@ -1,0 +1,14 @@
+model: grok-4.5
+api: xai
+max_tokens: 500000
+read_cost: 2.0
+write_cost: 6.0
+human_readable_id: Grok 4.5
+concurrent_requests: 32
+reasoning_effort: high
+temperature: null
+top_p: null
+date: "2026-07-08"
+other_params:
+  open: false
+  creator: xAI

@@ -1,0 +1,15 @@
+model: google-ai-studio/gemini-3.6-flash--high
+api: insait
+temperature: null
+top_p: null
+concurrent_requests: 64
+max_tokens: 65536
+cache_read_cost: 0.15
+read_cost: 1.5
+tool_choice: auto
+write_cost: 7.5
+human_readable_id: Gemini 3.6 Flash
+date: "2026-07-21"
+other_params:
+  open: false
+  creator: Google

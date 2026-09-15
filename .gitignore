@@ -47,3 +47,19 @@ scripts/extraction/timeline.py
 mds
 logs/
 scripts/euler/
+# Local curation inputs, source caches, and harness artifacts.
+.env
+.env.*
+arxivmath/paper/
+arxivmath/paper_train/
+arxivmath/source_cache/
+paper_train/
+paper_search_cache/
+external/
+agent_checkpoints/
+human_toolcalls/
+matharena-debug/
+wandb/
+core
+core.*
+core_*

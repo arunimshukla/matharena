@@ -9,7 +9,7 @@ from loguru import logger
 
 from matharena.parser import WarningType, check_answers, extract_answer, extract_boxed_answer, parse_answer
 from matharena.tools.submit_answer import check_hash_match
-from matharena.tools.lean_execution import COMPARATOR_TIMEOUT_WARNING, get_lean_feedback_dict_with_formal_statement
+from matharena.tools.lean_execution import COMPARATOR_FALLBACK_WARNINGS, get_lean_feedback_dict_with_formal_statement
 
 from matharena.utils import is_conversation_broken
 
@@ -145,8 +145,12 @@ def grade_lean_submission(messages, competition_config, problem, debug_info=""):
         last_message, formal_statement, environment=environment, messages=messages, use_comparator=True
     )
     is_correct = feedback["okay"] and not feedback["errors"]
-    warning = WarningType.POSSIBLE if COMPARATOR_TIMEOUT_WARNING in feedback["warnings"] else WarningType.NONE
+    warning = WarningType.POSSIBLE if any(
+        comparator_warning in feedback["warnings"] for comparator_warning in COMPARATOR_FALLBACK_WARNINGS
+    ) else WarningType.NONE
     return None, is_correct, warning.value
+
+
 
 
 def extract_and_grade(messages, output_tokens, gold_answer, competition_config, problem=None, debug_info=""):
@@ -170,6 +174,9 @@ def extract_and_grade(messages, output_tokens, gold_answer, competition_config, 
     is_broken, reason = is_conversation_broken(messages)
     if is_broken:
         raise ValueError(f"Message list is broken: {reason}")
+
+    if competition_config.get("grading") == "answer_judge":
+        raise ValueError("This competition uses answer judging; run scripts/judge/judge.py instead of the parser.")
 
     if is_lean_comp:
         return grade_lean_submission(messages, competition_config, problem, debug_info=debug_info)

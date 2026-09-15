@@ -1,0 +1,14 @@
+model: gemini-3.7-flash
+api: google
+concurrent_requests: 64
+max_tokens: 65536
+cache_read_cost: 0.075
+read_cost: 0.75
+tool_choice: auto
+write_cost: 3.75
+human_readable_id: Gemini 3.7 Flash (low)
+date: "2026-08-13"
+reasoning_effort: low
+other_params:
+  open: false
+  creator: Google

@@ -1,0 +1,10 @@
+#!/bin/sh
+set -eu
+
+# Sage requires HOME to exist before it starts; /work is a fresh bind mount.
+# MathArena supplies an isolated home inside that writable mount.
+if [ -n "${HOME:-}" ]; then
+    mkdir -p "$HOME"
+fi
+
+exec /usr/bin/setpriv --no-new-privs -- "$@"

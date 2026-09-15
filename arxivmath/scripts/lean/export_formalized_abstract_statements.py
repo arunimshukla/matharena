@@ -27,12 +27,17 @@ def latest_value(annotation, key):
     return (review.get(key) or annotation.get(key) or "").strip()
 
 
-def is_accepted(annotation):
+def is_accepted(annotation, require_manual_review=False):
     if not annotation:
         return False
-    review = annotation.get("review") or {}
-    if "review" in annotation and review.get("status") != "keep" and review:
-        return False
+    if require_manual_review:
+        manual_review = annotation.get("manual_review") or {}
+        if manual_review.get("status") != "keep":
+            return False
+    else:
+        review = annotation.get("review") or {}
+        if "review" in annotation and review.get("status") != "keep" and review:
+            return False
     if not annotation.get("keep"):
         return False
     # verification = annotation.get("verification") or {}
@@ -50,12 +55,17 @@ def main():
     parser.add_argument("--out-dir", required=True)
     parser.add_argument("--annotation-filename", default=ANNOTATION_FILENAME)
     parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument(
+        "--require-manual-review",
+        action="store_true",
+        help="Only export annotations whose manual_review status is keep.",
+    )
     args = parser.parse_args()
 
     accepted = []
     for paper_id in list_paper_ids(args.paper_root):
         annotation = load_annotation(args.paper_root, paper_id, args.annotation_filename)
-        if not is_accepted(annotation):
+        if not is_accepted(annotation, require_manual_review=args.require_manual_review):
             continue
         metadata = load_metadata(args.paper_root, paper_id)
         accepted.append(

@@ -1,0 +1,15 @@
+model: leanstral-1.5
+api: custom
+max_tokens: null
+temperature: null
+top_p: null
+read_cost: 0.0
+write_cost: 0.0
+human_readable_id: Leanstral 1.5
+date: "2026-07-03"
+other_params:
+  open: true
+  creator: Mistral
+  lean_environment: lean-4.22.0
+  huggingface_id: mistralai/Leanstral-1.5-119B-A6B
+  agent: MistralVibe

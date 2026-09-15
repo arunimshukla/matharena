@@ -1,0 +1,28 @@
+human_readable_id: GPT-5.6-Sol (max, via Codex API)
+date: "2026-07-09"
+other_params:
+  analysis_id: openai/gpt-56-sol
+  open: false
+  creator: OpenAI
+
+# Uses OPENAI_API_KEY and standard usage-based API billing.
+harness: codex
+harness_version: "0.147.0"
+model: gpt-5.6-sol
+api: openai
+reasoning_effort: max
+read_cost: 5
+cache_read_cost: 0.5
+write_cost: 30
+concurrent_requests: 16
+
+harness_config:
+  auth: api
+  container_executable: codex
+  cpu_limit: 4
+  memory_gb: 12
+  pids_limit: 768
+  tmpfs_size: 1g
+  read_only_rootfs: true
+  workspace_root: logs/harness_workspaces/{competition}/{solver_name}/p{problem_idx}_r{run_idx}
+  keep_workspaces: true

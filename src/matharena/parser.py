@@ -760,6 +760,10 @@ def check_answers(ans1, ans2):
                         
             # do approximate equal here
             err = abs(N(ans1 - ans2))
+            # Exact equality includes 0 == 0, for which relative error
+            # would otherwise divide by zero and produce NaN.
+            if err == 0:
+                return True
             if err < 1e-10 and err / max(abs(N(ans1)), abs(N(ans2))) < 1e-10:
                 return True
             return False

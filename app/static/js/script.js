@@ -33,10 +33,17 @@ document.addEventListener('DOMContentLoaded', function() {
     renderMarkedElements(document);
 });
 
+function competitionUrl(path) {
+    const url = new URL(path, window.location.origin);
+    const comp = document.getElementById('comp-dropdown')?.value;
+    if (comp) url.searchParams.set('comp', comp);
+    return url;
+}
+
 function loadResponseBox(element) {
     if (!element.open || element.hasAttribute('data-loaded')) return;
     const idd = element.getAttribute('id');
-    fetch(`/modelinteraction/${idd}`)
+    fetch(competitionUrl(`/modelinteraction/${encodeURIComponent(idd)}`))
         .then(response => response.text())
         .then(data => {
             const wrapper = document.createElement('div');
@@ -70,7 +77,7 @@ function loadHistoryStep(stepId) {
     const parts = stepId.split(">>");
     const index = parts[2];
 
-    fetch(`/historystep/${stepId}`)
+    fetch(competitionUrl(`/historystep/${encodeURIComponent(stepId)}`))
         .then(response => response.text())
         .then(data => {
             const element = document.getElementById(`history-step-content-${index}`);

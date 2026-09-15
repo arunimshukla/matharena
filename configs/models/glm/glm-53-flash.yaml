@@ -1,0 +1,38 @@
+human_readable_id: GLM 5.3 Flash
+date: "2026-09-03"
+other_params:
+  analysis_id: glm/glm-53-flash
+  open: true
+  creator: Z.ai
+  parameters: 320
+  active_parameters: 18
+  huggingface_id: zai-org/GLM-5.3-Flash
+
+# Kimi Code supplies the agent loop; GLM_API_KEY pays for Z.AI API usage.
+harness: kimi
+harness_version: "0.36.0"
+model: glm-5.3-flash
+api: glm
+max_tokens: 131072
+temperature: 1.0
+top_p: 0.95
+reasoning_effort: max
+extra_body:
+  thinking:
+    type: enabled
+    clear_thinking: false
+# Promotional Z.AI prices through 2026-09-09 16:00 UTC.
+cache_read_cost: 0.015
+read_cost: 0.075
+write_cost: 0.25
+concurrent_requests: 16
+
+harness_config:
+  auth: api
+  container_executable: kimi
+  environment:
+    KIMI_MODEL_MAX_CONTEXT_SIZE: "1048576"
+  cpu_limit: 4
+  memory_gb: 12
+  pids_limit: 768
+  tmpfs_size: 1g

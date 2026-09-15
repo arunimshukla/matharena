@@ -8,293 +8,264 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism.min.css" />
     <style>
       :root {
-        --bg: #f6f7f9;
-        --ink: #121417;
-        --muted: #5b636c;
-        --accent: #0f6a5f;
-        --accent-2: #f39c38;
-        --panel: #ffffff;
-        --line: #d4d9df;
+        --bg: #f4f6f7;
+        --ink: #1d2c30;
+        --muted: #5c6b73;
+        --accent: #146b5e;
+        --line: #dce3e6;
+        --panel: #fff;
       }
-      * {
-        box-sizing: border-box;
+      * { box-sizing: border-box; }
+      body { margin: 0; background: var(--bg); color: var(--ink); font-family: "IBM Plex Sans", "Segoe UI", sans-serif; }
+      a { color: var(--accent); text-underline-offset: 3px; }
+      button, textarea, select { font: inherit; }
+      a:focus-visible, button:focus-visible, summary:focus-visible, textarea:focus-visible, .js-edit-preview:focus-visible {
+        outline: 3px solid #358bcd; outline-offset: 4px;
       }
-      body {
-        margin: 0;
-        font-family: "IBM Plex Sans", "Segoe UI", Tahoma, sans-serif;
-        background:
-          radial-gradient(circle at 10% 20%, rgba(243, 156, 56, 0.15), transparent 45%),
-          radial-gradient(circle at 90% 0%, rgba(15, 106, 95, 0.18), transparent 40%),
-          linear-gradient(180deg, #fdfdfc 0%, var(--bg) 100%);
-        color: var(--ink);
-      }
-      .wrap {
-        max-width: 980px;
-        margin: 36px auto 72px;
-        padding: 0 20px;
-      }
-      header {
-        display: flex;
-        justify-content: space-between;
-        align-items: baseline;
-        gap: 16px;
-      }
-      h1 {
-        font-size: 2.2rem;
-        line-height: 1.2;
-        margin: 0 0 8px;
-      }
-      .meta {
-        color: var(--muted);
-        font-size: 0.95rem;
-      }
-      .panel {
-        background: var(--panel);
-        border: 1px solid #e6e9ed;
-        border-radius: 16px;
-        padding: 24px;
-        box-shadow: 0 18px 40px rgba(18, 20, 23, 0.08);
-      }
-      .section-title {
-        text-transform: uppercase;
-        letter-spacing: 0.08em;
-        font-size: 0.8rem;
-        color: var(--muted);
-        margin: 24px 0 10px;
-      }
-      .authors {
-        margin: 0 0 12px;
-      }
-      .badge {
-        display: inline-block;
-        background: #eef4f3;
-        color: #33524d;
-        padding: 2px 8px;
-        border-radius: 999px;
-        font-size: 0.8rem;
-        margin-right: 6px;
-        margin-bottom: 6px;
-      }
-      form {
-        margin-top: 24px;
-        display: grid;
-        gap: 16px;
-      }
-      .row {
-        display: flex;
-        gap: 16px;
-        flex-wrap: wrap;
-      }
-      label {
-        font-weight: 700;
-      }
-      textarea {
-        width: 100%;
-        min-height: 120px;
-        resize: vertical;
-        padding: 10px;
-        border-radius: 10px;
-        border: 1px solid var(--line);
-        font-family: inherit;
-        font-size: 1rem;
-      }
-      select {
-        padding: 8px;
-        border-radius: 10px;
-        border: 1px solid #d4d9df;
-        font-family: inherit;
-        font-size: 1rem;
-      }
-      button {
-        background: var(--accent);
-        color: white;
-        border: none;
-        padding: 10px 18px;
-        border-radius: 999px;
-        font-size: 1rem;
-        cursor: pointer;
-        letter-spacing: 0.01em;
-      }
-      button:hover {
-        filter: brightness(0.95);
-      }
-      nav {
-        margin-top: 18px;
-        display: flex;
-        gap: 12px;
-        justify-content: space-between;
-      }
-      nav a {
-        color: var(--accent);
-        text-decoration: none;
-        font-weight: 700;
-      }
-      .muted {
-        color: var(--muted);
-      }
-      .content-text {
-        font-size: 1.05rem;
-        line-height: 1.6;
-      }
-      .meta a {
-        color: var(--accent);
-        text-decoration: none;
-      }
-      .editor-card {
-        display: grid;
-        gap: 10px;
-      }
-      .editable-box {
-        border: 1px solid #dde3e8;
-        border-radius: 14px;
-        background: linear-gradient(180deg, #fff 0%, #fbfcfd 100%);
-        padding: 18px;
-        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
-      }
-      .editable-display {
-        min-height: 84px;
-        white-space: pre-wrap;
-        line-height: 1.65;
-        font-size: 1.02rem;
-        cursor: text;
-      }
-      .editable-display.is-empty {
-        color: var(--muted);
-        font-style: italic;
-      }
-      .edit-shell {
-        display: none;
-        gap: 10px;
-      }
-      .edit-shell textarea {
-        min-height: 160px;
-        background: #fff;
-      }
-      .edit-shell.is-open {
-        display: grid;
-      }
-      .field-note {
-        color: var(--muted);
-        font-size: 0.92rem;
-      }
-      .code-panel {
-        margin-top: 18px;
-      }
-      .code-panel pre {
-        margin: 0;
-        border: 1px solid #dde3e8;
-        border-radius: 12px;
-        max-height: 560px;
-        overflow: auto;
-        font-size: 0.9rem;
-        line-height: 1.45;
-      }
-      .code-panel code {
-        font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
-      }
-      @media (max-width: 600px) {
-        h1 {
-          font-size: 1.6rem;
-        }
-        .editable-box {
-          padding: 15px;
-        }
+      .topbar { background: var(--panel); border-bottom: 1px solid var(--line); }
+      .bar-inner { max-width: 1280px; margin: auto; padding: 16px 28px; display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+      .brand { font-weight: 700; letter-spacing: -0.02em; }
+      .brand span { font-weight: 400; color: var(--muted); margin-left: 12px; }
+      .queue { font-size: 0.86rem; color: var(--muted); white-space: nowrap; }
+      .wrap { max-width: 1280px; margin: 28px auto 40px; padding: 0 28px; }
+      .paper-heading { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-bottom: 24px; }
+      .paper-heading > div { min-width: 0; }
+      h1 { font-size: clamp(1.25rem, 2.2vw, 1.8rem); line-height: 1.3; letter-spacing: -0.025em; margin: 6px 0 0; overflow-wrap: anywhere; }
+      h2 { margin: 0; font-size: 1rem; font-weight: 600; }
+      h3, .section-title { margin: 24px 0 10px; font-size: 0.84rem; font-weight: 600; color: var(--muted); }
+      .meta, .muted { color: var(--muted); font-size: 0.88rem; }
+      .paper-link { flex-shrink: 0; text-decoration: none; font-size: 0.9rem; }
+      .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 2px 4px #1d2c3003; min-width: 0; }
+      form { display: grid; gap: 16px; }
+      .statement-grid { display: grid; gap: 20px; align-items: start; }
+      .editor-card { padding: 24px; min-width: 0; }
+      .editor-card--true_statement { border-top: 3px solid var(--accent); }
+      .editor-card--false_statement { border-top: 3px solid #ab683b; }
+      .editor-card--true_statement h2 { color: var(--accent); }
+      .editor-card--false_statement h2 { color: #8e5129; }
+      .field-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
+      .content-text, .editable-display { font-size: 1rem; line-height: 1.8; overflow-wrap: anywhere; }
+      .editable-display, .prose { white-space: pre-wrap; }
+      .editable-display { font-family: "IBM Plex Sans", "Segoe UI", sans-serif; }
+      .js-edit-preview { cursor: text; min-height: 84px; }
+      .js-edit-preview:hover { background: #f7faf9; border-radius: 6px; }
+      .editable-display.is-empty { color: var(--muted); font-style: italic; }
+      .edit-shell { display: none; gap: 10px; }
+      .edit-shell.is-open { display: grid; }
+      textarea { width: 100%; min-height: 160px; resize: vertical; padding: 14px; border: 1px solid var(--line); border-radius: 8px; background: white; }
+      select { padding: 8px; border: 1px solid var(--line); border-radius: 8px; }
+      .field-note { margin-top: 14px; color: var(--muted); font-size: 0.82rem; }
+      .katex-display { overflow-x: auto; overflow-y: hidden; padding: 4px 0; }
+      .supporting { display: grid; gap: 12px; }
+      .support-heading { font-size: 0.82rem; color: var(--muted); font-weight: 600; margin: 12px 2px 0; }
+      details.panel { overflow: hidden; }
+      summary { cursor: pointer; font-weight: 600; list-style: none; display: flex; align-items: center; gap: 12px; padding: 18px 24px; }
+      summary::-webkit-details-marker { display: none; }
+      summary::after { content: "+"; margin-left: auto; color: var(--muted); font-size: 1.2rem; font-weight: 400; }
+      details[open] > summary::after { content: "−"; }
+      details[open] > summary { border-bottom: 1px solid var(--line); }
+      summary:hover { background: #f8fafb; }
+      .detail-body { padding: 24px; }
+      .detail-body > :first-child { margin-top: 0; }
+      .detail-body > :last-child { margin-bottom: 0; }
+      .detail-body > details { margin-top: 20px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+      .detail-body > details > summary { padding: 14px 18px; font-size: 0.9rem; }
+      .detail-body > details > .detail-body { padding: 18px; }
+      .badge { display: inline-block; padding: 3px 9px; border-radius: 6px; background: #edf3f1; color: #265c4e; font-size: 0.76rem; font-weight: 600; }
+      .badge--failed { background: #fbeeee; color: #963e3b; }
+      .badge--neutral { background: #eef1f4; color: var(--muted); }
+      .status-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin: 20px 0; }
+      .status-label { color: var(--muted); font-size: 0.8rem; margin-bottom: 4px; }
+      .check-grid { list-style: none; padding: 0; margin: 0 0 24px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 24px; }
+      .check-grid li { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 0.87rem; border-bottom: 1px solid #edf0f2; padding: 10px 0; }
+      .source-record { max-height: 440px; overflow: auto; padding: 16px; border: 1px solid var(--line); border-radius: 8px; background: #f7f9fa; white-space: pre-wrap; overflow-wrap: anywhere; font-family: "IBM Plex Mono", Consolas, monospace; font-size: 0.8rem; line-height: 1.65; }
+      .evidence-location { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 24px 0 8px; font-size: 0.82rem; color: var(--muted); }
+      .evidence-location:first-child { margin-top: 0; }
+      .paper-meta { display: flex; flex-wrap: wrap; gap: 8px 18px; color: var(--muted); font-size: 0.85rem; margin-bottom: 18px; }
+      .code-panel { padding: 24px; }
+      .code-panel pre { margin: 12px 0 0; max-height: 560px; overflow: auto; border-radius: 8px; font-size: 0.9rem; }
+      .review-toolbar { position: sticky; bottom: 16px; z-index: 10; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; padding: 14px 20px; margin-top: 8px; background: #fff; border: 1px solid #cad5d8; border-radius: 12px; box-shadow: 0 6px 24px #1d2c3012; }
+      .review-toolbar nav, .decisions { display: flex; align-items: center; gap: 12px; }
+      .review-toolbar nav a { text-decoration: none; padding: 9px 8px; font-size: 0.9rem; }
+      .review-toolbar nav [aria-disabled="true"] { padding: 9px 8px; font-size: 0.9rem; color: #7c878c; }
+      button { cursor: pointer; border: 1px solid transparent; border-radius: 8px; padding: 10px 20px; font-size: 0.92rem; font-weight: 600; background: var(--accent); color: white; }
+      button:hover { background: #10584d; }
+      .button-reject { color: #9b403b; background: white; border-color: #dcc5c3; }
+      .button-reject:hover { background: #fff3f2; }
+      @media (min-width: 1100px) { .statement-grid.compare { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+      @media (max-width: 640px) {
+        .bar-inner { padding: 14px 16px; }
+        .brand span { display: none; }
+        .wrap { margin-top: 20px; padding: 0 16px; }
+        .paper-heading { align-items: flex-start; gap: 12px; }
+        .paper-link { font-size: 0.8rem; margin-top: 3px; }
+        .editor-card, .detail-body, .code-panel { padding: 18px; }
+        summary { padding: 16px 18px; }
+        .statement-grid { gap: 14px; }
+        .check-grid { grid-template-columns: 1fr; }
+        .review-toolbar { bottom: 8px; gap: 8px; padding: 10px 12px; }
+        .review-toolbar nav { justify-content: space-between; width: 100%; }
+        .decisions { width: 100%; }
+        .decisions button { flex: 1; }
       }
     </style>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600;700&display=swap" />
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap" />
   </head>
   <body>
-    <div class="wrap">
-      <header>
+    {% macro field_card(field) %}
+      <section class="panel editor-card editor-card--{{ field.name }}" id="field-{{ field.name }}" aria-labelledby="{{ field.name }}-heading">
+        <div class="field-heading"><h2 id="{{ field.name }}-heading">{{ field.label }}</h2></div>
+        {% if field.editable is not defined or field.editable %}
+          <div class="editable-box">
+            <div id="{{ field.name }}-preview" class="editable-display js-edit-preview" tabindex="0" role="button" aria-label="Edit {{ field.label }}" data-empty-text="{{ field.empty_text }}"></div>
+            <div id="{{ field.name }}-editor" class="edit-shell">
+              <textarea id="{{ field.name }}" name="{{ field.name }}" aria-labelledby="{{ field.name }}-heading" placeholder="{{ field.placeholder }}" style="height: {{ field.height }}px">{{ annotation[field.name] or "" }}</textarea>
+            </div>
+          </div>
+          <div class="field-note">Click the statement to edit. Click away or press Escape to preview.</div>
+        {% else %}
+          <div class="editable-display">{{ annotation[field.name] or field.empty_text }}</div>
+        {% endif %}
+      </section>
+    {% endmacro %}
+    {% macro evidence_list(records) %}
+      {% for evidence in records %}
+        <div class="evidence-location">
+          {% if evidence.role %}<span class="badge badge--neutral">{{ evidence.role | replace('_', ' ') }}</span>{% endif %}
+          {% if evidence.start_line is defined %}
+            <span>{{ evidence.source_file }}, lines {{ evidence.start_line }}-{{ evidence.end_line }}</span>
+          {% else %}
+            <span>Source location unavailable</span>
+          {% endif %}
+        </div>
+        <pre class="source-record">{{ evidence.quote }}</pre>
+      {% endfor %}
+    {% endmacro %}
+
+    <div class="topbar">
+      <div class="bar-inner">
+        <div class="brand">{{ 'BrokenArXiv' if false_mode else 'arXiv' }}<span>Human review</span></div>
+        <div class="queue">{{ position }} / {{ total }} in queue</div>
+      </div>
+    </div>
+    <main class="wrap" id="paper-content">
+      <header class="paper-heading">
         <div>
-          <div class="meta">Paper {{ position }} of {{ total }}</div>
+          <div class="meta">{{ paper_id }}</div>
           <h1>{{ metadata.title or paper_id }}</h1>
-          <div class="authors">
-            {% for author in metadata.authors or [] %}
-              {{ author.forenames }} {{ author.keyname }}{% if not loop.last %}, {% endif %}
-            {% endfor %}
-          </div>
-          <div class="meta">
-            <span>{{ paper_id }}</span>
-            {% if metadata.categories %}
-              · <span>{{ metadata.categories | join(", ") }}</span>
-            {% endif %}
-            {% if metadata.created %}
-              · <span>Created {{ metadata.created }}</span>
-            {% endif %}
-            {% if metadata.updated %}
-              · <span>Updated {{ metadata.updated }}</span>
-            {% endif %}
-          </div>
         </div>
-        <div>
-          <a href="https://arxiv.org/abs/{{ metadata.id }}" target="_blank" rel="noreferrer">Open arXiv</a>
-        </div>
+        <a class="paper-link" href="https://arxiv.org/abs/{{ metadata.id or paper_id }}" target="_blank" rel="noreferrer">Open arXiv ↗</a>
       </header>
 
-        <div class="panel content-text" id="paper-content">
-        <div class="section-title">Abstract</div>
-        <div>{{ metadata.abstract or "No abstract available." }}</div>
-
-        {% if metadata.comments %}
-          <div class="section-title">Comments</div>
-          <div>{{ metadata.comments }}</div>
+      <form action="{{ url_for('annotate', paper_id=paper_id) }}" method="post">
+        {% if source_details and source_details.review_binding %}
+          <input type="hidden" name="review_binding" value="{{ source_details.review_binding }}">
         {% endif %}
-
-        {% if metadata.journal_ref %}
-          <div class="section-title">Journal</div>
-          <div>{{ metadata.journal_ref }}</div>
-        {% endif %}
-
-        {% if metadata.license %}
-          <div class="section-title">License</div>
-          <div>{{ metadata.license }}</div>
-        {% endif %}
-
-        <form action="{{ url_for('annotate', paper_id=paper_id) }}" method="post">
-          <div class="row">
-            <button type="submit" name="status" value="keep">Keep and Next</button>
-            <button type="submit" name="status" value="discard">Reject</button>
-          </div>
-          {% for field in field_specs %}
-            <div class="editor-card">
-              <label for="{{ field.name }}">{{ field.label }}</label>
-              <div class="editable-box">
-                <div
-                  id="{{ field.name }}-preview"
-                  class="editable-display js-edit-preview"
-                  data-empty-text="{{ field.empty_text }}"
-                ></div>
-                <div id="{{ field.name }}-editor" class="edit-shell">
-                  <textarea id="{{ field.name }}" name="{{ field.name }}" placeholder="{{ field.placeholder }}" style="height: {{ field.height }}px">{{ annotation[field.name] or "" }}</textarea>
-                </div>
-              </div>
-              {% if loop.first %}
-                <div class="field-note">Click the rendered field to edit the raw text, then click away to return to preview.</div>
-              {% endif %}
-            </div>
+        <div class="statement-grid{{ ' compare' if false_mode else '' }}" aria-label="Statements to review">
+          {% for field in field_specs if field.name != 'falsity_explanation' %}
+            {{ field_card(field) }}
           {% endfor %}
-        </form>
-      </div>
+        </div>
 
-      <nav>
-        <div>
-          {% if prev_id %}
-            <a href="{{ url_for('paper_view', paper_id=prev_id) }}">Previous</a>
-          {% else %}
-            <span class="muted">Previous</span>
+        <div class="supporting">
+          <div class="support-heading">Supporting material</div>
+          {% for field in field_specs if field.name == 'falsity_explanation' %}
+            <details class="panel" id="reference-refutation">
+              <summary>{{ field.label }}</summary>
+              <div class="detail-body content-text">
+                {% if field.editable is not defined or field.editable %}
+                  {{ field_card(field) }}
+                {% else %}
+                  <div class="prose">{{ annotation[field.name] or field.empty_text }}</div>
+                {% endif %}
+              </div>
+            </details>
+          {% endfor %}
+
+          {% if source_details %}
+            <details class="panel" id="independent-verification">
+              <summary>Independent verification <span class="badge{{ '' if source_details.verification.passed else ' badge--failed' }}">{{ source_details.verification.status or 'Missing' }}</span></summary>
+              <div class="detail-body content-text">
+                {% if source_details.verification.checks %}
+                  <ul class="check-grid" aria-label="Verification checks">
+                    {% for check, passed in source_details.verification.checks.items() %}
+                      <li><span>{{ check | replace('_', ' ') | capitalize }}</span><span class="badge{{ '' if passed else ' badge--failed' }}">{{ 'Passed' if passed else 'Failed' }}</span></li>
+                    {% endfor %}
+                  </ul>
+                {% endif %}
+                {% if source_details.verification.reason %}
+                  <h3>Verifier rationale</h3>
+                  <div class="prose">{{ source_details.verification.reason }}</div>
+                {% endif %}
+                {% if source_details.verification.evidence %}
+                  <details>
+                    <summary>Independent verifier's TeX evidence <span class="badge badge--neutral">{{ source_details.verification.evidence | length }}</span></summary>
+                    <div class="detail-body">{{ evidence_list(source_details.verification.evidence) }}</div>
+                  </details>
+                {% endif %}
+              </div>
+            </details>
+
+            <details class="panel" id="source-grounding">
+              <summary>Source grounding &amp; difficulty</summary>
+              <div class="detail-body content-text">
+                <div class="prose">{{ source_details.basis_summary or "No basis summary available." }}</div>
+                <div class="status-grid">
+                  <div><div class="status-label">Claim type</div><div>{{ (source_details.novelty_type or 'Not classified') | replace('_', ' ') }}</div></div>
+                  <div><div class="status-label">Importance</div><div>{{ (source_details.importance or 'Not classified') | replace('_', ' ') }}</div></div>
+                </div>
+                {% if source_details.prior_claim %}
+                  <h3>Prior claim</h3><div class="prose">{{ source_details.prior_claim }}</div>
+                {% endif %}
+                {% if source_details.new_result and not false_mode %}
+                  <h3>New result</h3><div class="prose">{{ source_details.new_result }}</div>
+                {% endif %}
+                {% if source_details.difficulty_rationale %}
+                  <h3>Research barrier</h3><div class="prose">{{ source_details.difficulty_rationale }}</div>
+                  <h3>Prior plausibility</h3><div class="prose">{{ source_details.plausibility_rationale }}</div>
+                  <h3>Generator's easy-refutation audit</h3><div class="prose">{{ source_details.easy_refutation_audit }}</div>
+                {% endif %}
+              </div>
+            </details>
+            {% if source_details.evidence %}
+              <details class="panel" id="source-evidence">
+                <summary>Source excerpts <span class="badge badge--neutral">{{ source_details.evidence | length }}</span></summary>
+                <div class="detail-body">{{ evidence_list(source_details.evidence) }}</div>
+              </details>
+            {% endif %}
           {% endif %}
+
+
+          <details class="panel" id="paper-details">
+            <summary>Paper details &amp; abstract</summary>
+            <div class="detail-body content-text">
+              <div class="paper-meta">
+                {% if metadata.authors %}<span>{% for author in metadata.authors %}{{ author.forenames }} {{ author.keyname }}{% if not loop.last %}, {% endif %}{% endfor %}</span>{% endif %}
+                {% if metadata.categories %}<span>{{ metadata.categories | join(', ') }}</span>{% endif %}
+                {% if metadata.created %}<span>Created {{ metadata.created }}</span>{% endif %}
+                {% if metadata.updated %}<span>Updated {{ metadata.updated }}</span>{% endif %}
+              </div>
+              <h3>Abstract</h3><div class="prose">{{ metadata.abstract or 'No abstract available.' }}</div>
+              {% if metadata.comments %}<h3>Comments</h3><div class="prose">{{ metadata.comments }}</div>{% endif %}
+              {% if metadata.journal_ref %}<h3>Journal</h3><div>{{ metadata.journal_ref }}</div>{% endif %}
+              {% if metadata.license %}<h3>License</h3><div>{{ metadata.license }}</div>{% endif %}
+            </div>
+          </details>
         </div>
-        <div>
-          {% if next_id %}
-            <a href="{{ url_for('skip_paper', paper_id=paper_id) }}">Skip</a>
-          {% else %}
-            <span class="muted">Skip</span>
-          {% endif %}
+
+        <div class="review-toolbar">
+          <nav aria-label="Review navigation">
+            {% if prev_id %}<a href="{{ url_for('paper_view', paper_id=prev_id) }}">← Previous</a>{% else %}<span aria-disabled="true">← Previous</span>{% endif %}
+            {% if next_id %}<a href="{{ url_for('skip_paper', paper_id=paper_id) }}">Skip →</a>{% else %}<span aria-disabled="true">Skip →</span>{% endif %}
+          </nav>
+          <div class="decisions">
+            <button class="button-reject" type="submit" name="status" value="discard">Reject</button>
+            <button type="submit" name="status" value="keep">Keep &amp; next →</button>
+          </div>
         </div>
-      </nav>
-    </div>
+      </form>
+    </main>
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"
     integrity="sha384-XjKyOOlGwcjNTAIQHIpgOno0Hl1YQqzUOEleOLALmuqehneUG+vnGctmUb0ZY0l8"
     crossorigin="anonymous"></script>
@@ -360,6 +331,12 @@
           };
 
           preview.addEventListener("click", openEditor);
+          preview.addEventListener("keydown", (event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              openEditor();
+            }
+          });
           textarea.addEventListener("blur", closeEditor);
           textarea.addEventListener("keydown", (event) => {
             if (event.key === "Escape") {

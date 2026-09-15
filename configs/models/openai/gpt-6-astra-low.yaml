@@ -1,0 +1,24 @@
+human_readable_id: GPT-6 Astra (low)
+date: "2026-09-04"
+other_params:
+  analysis_id: openai/gpt-6-astra-low
+  open: false
+  creator: OpenAI
+
+model: gpt-6-astra
+api: openai
+harness: codex
+harness_version: "0.153.3"
+reasoning_effort: low
+concurrent_requests: 16
+# API-equivalent token costs for reporting; auth below uses the subscription.
+read_cost: 10
+cache_read_cost: 1
+write_cost: 50
+
+harness_config:
+  auth: subscription
+  oauth_auto_login: false
+  oauth_auto_relogin: false
+  container_executable: codex
+  model_context_window: 1050000

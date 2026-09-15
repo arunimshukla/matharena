@@ -147,7 +147,12 @@ To add a new model add a config file in the `configs/models` folder. Each config
   - `date`: Release date of the model in the format "yyyy-mm-dd".
   - `batch_processing`: If set to true, the model will be queried using batch processing. Only available for OpenAI and Anthropic models.
   - `use_openai_responses_api`: If set to true, will use the OpenAI responses API (instead of chat completions).
+  - `harness`: Run the model through `codex`, `claude`, `kimi`, `gemini`, `qwen`, or `opencode`; requires the competition to opt in with `allow_harness: true`. Set it to `false` to opt out of a competition default.
+  - `harness_version`: Optional exact CLI version; defaults to the latest release resolved at run startup.
+  - `harness_config`: Docker image, resource limits, workspace, and harness authentication settings. Harness runs use minimal reproducible CLI context by default; set `minimal_context: false` only to restore a CLI's native skills and instructions.
   - Other model/provider specific parameters (`config`, `provider`, `reasoning`, etc.).
+
+See [Harness-backed model runs](readmes/README_harness.md) for configuration, API billing, isolation, and arXivLean tool integration details.
 
 ### Agents
 
@@ -170,3 +175,5 @@ To add a new scaffolding, follow the example of `solvers/selfcheck_agent.py` whi
       url={https://arxiv.org/abs/2605.00674}, 
 }
 ```
+
+For BrokenArXiv dataset generation (`arxiv_false`), see the [source-based Codex pipeline and overhaul notes](readmes/README_brokenarxiv.md).

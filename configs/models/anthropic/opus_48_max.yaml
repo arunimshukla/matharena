@@ -20,5 +20,6 @@ anthropic_betas:
 human_readable_id: Claude-Opus-4.8 (max)
 date: "2026-05-28"
 other_params:
+  analysis_id: anthropic/opus_48_max
   open: false
   creator: Anthropic

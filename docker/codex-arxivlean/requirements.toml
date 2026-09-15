@@ -1,0 +1,27 @@
+# This policy applies to model-generated commands, not to the Codex process
+# itself. Codex can contact OpenAI, while its shell commands remain offline.
+allowed_approval_policies = ["never"]
+allowed_web_search_modes = []
+default_permissions = "arxivlean_benchmark"
+allow_login_shell = false
+
+[allowed_permission_profiles]
+arxivlean_benchmark = true
+
+[permissions.arxivlean_benchmark]
+description = "One offline ArXivLean problem with read-only Lean dependencies."
+
+[permissions.arxivlean_benchmark.filesystem]
+glob_scan_max_depth = 4
+":minimal" = "read"
+":tmpdir" = "write"
+":slash_tmp" = "write"
+"/elan" = "read"
+"/mathlib-cache" = "read"
+"/run/codex-home" = "deny"
+
+[permissions.arxivlean_benchmark.filesystem.":workspace_roots"]
+"." = "write"
+
+[permissions.arxivlean_benchmark.network]
+enabled = false

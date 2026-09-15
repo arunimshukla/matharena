@@ -1,0 +1,17 @@
+model: leanstral-1.5-kimi-k3
+api: custom
+max_tokens: null
+temperature: null
+top_p: null
+read_cost: 0.0
+write_cost: 0.0
+human_readable_id: Mistral Prover (Leanstral 1.5 + K3)
+date: "2026-09-11"
+lean_environment_override: lean-4.30.0
+other_params:
+  open: true
+  creator: Mistral / Moonshot AI
+  lean_environment: lean-4.30.0
+  huggingface_id: mistralai/Leanstral-1.5-119B-A6B
+  agent: Kimi K3 (coordinator), Leanstral 1.5 (solver)
+  exclude_from_expected_performance: true

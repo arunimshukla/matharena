@@ -65,9 +65,11 @@
                     <summary>[Run {{ instance.run }}] Metadata:</summary>
                     <div class="box metadata-box">
                         {% if instance.metadata.cost %}
-                        <p>Cost: ${{ instance.metadata.cost.cost }}</p>
+                        {% set recovery = instance.metadata.cost.token_usage_recovery %}
+                        <p>Cost: ${{ instance.metadata.cost.cost }}{% if recovery and recovery.estimated %} (estimated){% endif %}</p>
                         <p>Input Tokens: {{ instance.metadata.cost.input_tokens }}</p>
-                        <p>Output Tokens: {{ instance.metadata.cost.output_tokens }}</p>
+                        <p>Output Tokens: {{ instance.metadata.cost.output_tokens }}{% if recovery and recovery.estimated %} (includes estimated reasoning){% endif %}</p>
+                        {% if recovery and recovery.warning %}<p>{{ recovery.warning }}</p>{% endif %}
                             {% if instance.metadata.cost.time %}
                                 <p>Time taken: {{ instance.metadata.cost.time}}s</p>
                             {% endif %}

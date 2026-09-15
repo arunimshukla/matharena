@@ -1,0 +1,6 @@
+# The outer Docker container is the command sandbox. Codex itself is launched
+# with its inner Bubblewrap sandbox disabled because nested user/mount
+# namespaces are unavailable inside the hardened container.
+allowed_approval_policies = ["never"]
+allowed_web_search_modes = []
+allow_login_shell = false

@@ -9,7 +9,7 @@ from matharena.json_zst import OUTPUT_JSON_SUFFIX, dump_json_zst, load_json_zst
 from matharena.utils import (
     convert_answer_to_string,
     ensure_final_response_message,
-    lists_differ,
+    run_limit_exceeded,
     is_conversation_broken,
     normalize_conversation,
     save_run_for_recovery,
@@ -136,10 +136,6 @@ class Runs:
             logger.warning(f"Source mismatch in {self.path}: here {self.source} vs there {runs_dict.get('source')}")
         if "types" not in runs_dict:
             logger.warning(f"Missing problem types in {self.path}")
-        elif lists_differ(self.problem_type, runs_dict["types"]):
-            logger.warning(
-                f"Problem type mismatch in {self.path}: here {self.problem_type} vs there {runs_dict['types']}"
-            )
 
         # Load aggregates
         self.N = len(runs_dict["answers"])
@@ -265,6 +261,9 @@ class Runs:
         )
 
     def update_aggregates(self):
+        for i, cost in enumerate(self.detailed_costs):
+            if run_limit_exceeded(cost):
+                self.correct[i] = False
         self.N = len(self.messages)
         self.cost = {}
         for k in ["cost", "input_tokens", "output_tokens", "time", "n_retries", "request_time"]:

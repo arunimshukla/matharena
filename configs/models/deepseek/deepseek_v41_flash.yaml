@@ -1,0 +1,27 @@
+# DeepSeek-V4.1-Flash uses the official API name deepseek-flash.
+model: deepseek-flash
+api: deepseek
+# Deep Code runs locally; DEEPSEEK_API_KEY pays for the official DeepSeek API.
+harness: deepcode
+harness_version: "0.3.1"
+harness_config:
+  auth: api
+  container_executable: deepcode
+  cpu_limit: 4
+  memory_gb: 12
+  pids_limit: 768
+  tmpfs_size: 1g
+max_tokens: 384000
+temperature: 1
+top_p: 1
+# Peak-hour USD per 1M tokens, verified 2026-09-10:
+# https://api-docs.deepseek.com/quick_start/pricing/
+read_cost: 0.30
+cache_read_cost: 0.006
+write_cost: 1.20
+reasoning_effort: max
+concurrent_requests: 64
+human_readable_id: DeepSeek-V4.1-Flash (Max)
+date: "2026-09-10"
+other_params:
+  creator: DeepSeek

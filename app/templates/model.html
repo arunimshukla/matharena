@@ -18,7 +18,7 @@
     <h3 style="text-align: left;">Model: {{ model }}</h3>
     <div>
         <p class="strong">Avg Acc: {{ stats.avg_accuracy }} ({{ stats.nb_problems }} problems)</p>
-        <p class="strong">Cost: ${{ stats.total_cost }}</p>
+        <p class="strong">Cost: ${{ stats.total_cost }}{% if stats.cost_estimated %} (estimated){% endif %}</p>
         <div>
             <a href="javascript:void(0)" class="sidebar-item copy-button" onclick="copyToClipboard()">📋</a>
             {% for stat in stats.problem_stats %}

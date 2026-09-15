@@ -95,7 +95,7 @@ for comp in args.comps:
 
                 # Rerun grading
                 if not args.no_rerun_grader:
-                    if runner.is_fa_comp:
+                    if runner.is_fa_comp and not runner.uses_answer_judge:
                         # logger.info("Rerunning grading")
                         for i in range(runs.N):
                             clean_conversation = runs.messages[i]
@@ -108,7 +108,7 @@ for comp in args.comps:
                             )
                             runs.update_run_grading(i, grader_response)
                     else:
-                        logger.info("Skipping rerunning grading since not final answer competition")
+                        logger.info("Skipping parser grading; this competition uses a separate judge/verifier")
 
                 # Rerun cost
                 if not args.no_rerun_cost:

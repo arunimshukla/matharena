@@ -1,0 +1,33 @@
+model: glm-5.3
+api: glm
+# OpenCode supplies the agent loop; GLM_API_KEY pays for Z.AI API usage.
+harness: opencode
+harness_version: "1.18.27"
+max_tokens: 131072
+concurrent_requests: 64
+temperature: 1.0
+top_p: 0.95
+reasoning_effort: max
+extra_body:
+  thinking:
+    type: enabled
+cache_read_cost: 0.26
+read_cost: 1.4
+write_cost: 4.4
+human_readable_id: GLM 5.3
+date: "2026-09-02"
+other_params:
+  open: true
+  creator: Z.ai
+  parameters: 753
+  active_parameters: 40
+  huggingface_id: zai-org/GLM-5.3
+stream_openai_chat_completions: true
+
+harness_config:
+  auth: api
+  container_executable: opencode
+  cpu_limit: 4
+  memory_gb: 12
+  pids_limit: 768
+  tmpfs_size: 1g

@@ -19,6 +19,7 @@ from anthropic.types.beta.message_create_params import MessageCreateParamsNonStr
 from anthropic.types.beta.messages.batch_create_params import Request as BetaRequest
 from loguru import logger
 from openai import OpenAI, RateLimitError
+from openai.types.responses import Response
 from together import Together
 from tqdm import tqdm
 from transformers import AutoTokenizer
@@ -76,6 +77,7 @@ class APIClient:
         use_openai_responses_api=False,
         use_gdm_tools=False,
         stream_openai_chat_completions=False,
+        stream_openai_responses=False,
         max_tool_calls=0,
         cache_write_cost=0,
         tools=None,
@@ -86,7 +88,7 @@ class APIClient:
 
         Args:
             model (str): The name of the model to use.
-            timeout (int, optional): The timeout for API requests in seconds. Defaults to 9000.
+            timeout (int, optional): The timeout for API requests in seconds. Defaults to 30000 (over 8 hours).
             max_tokens (int, optional): The maximum number of tokens to generate. Defaults to None.
             api (str, optional): The API to use. Defaults to 'openai'.
             default_headers (dict, optional): Default headers to send with OpenAI-compatible clients.
@@ -104,6 +106,7 @@ class APIClient:
             batch_processing (bool, optional): Whether to use batch processing. Defaults to False.
             use_openai_responses_api (bool, optional): Whether to use OpenAI responses. Defaults to False.
             stream_openai_chat_completions (bool, optional): Whether to stream OpenAI chat completions internally.
+            stream_openai_responses (bool, optional): Whether to stream Responses internally, retaining the final response.
             max_tool_calls (int|dict, optional): The maximum number of tool calls to make. Defaults to 0.
                 Could also be a dict that specifies max calls per tool name.
             tools (list, optional): A list of tools to use. Defaults to None.
@@ -165,6 +168,7 @@ class APIClient:
         self.use_gdm_tools = use_gdm_tools
         self.use_google_internal_tools = False
         self.stream_openai_chat_completions = stream_openai_chat_completions
+        self.stream_openai_responses = stream_openai_responses
         self.include_max_tool_calls = include_max_tool_calls
         self.cache_write_cost = cache_write_cost
         self.background = background
@@ -260,7 +264,7 @@ class APIClient:
                 "project_id": os.environ["CF_PROJECT_ID"],
                 "user_id": os.environ["CF_USER_ID"],
             })
-            self.api_key = os.getenv("INSAIT_API_KEY")
+            self.api_key = os.getenv("CF_AIG_TOKEN")
             self.base_url = "https://ai-gateway.plain-flower-4887.workers.dev/compat"
             self.default_headers = {"cf-aig-metadata": metadata}
             self.api = "openai"
@@ -308,8 +312,11 @@ class APIClient:
             self.base_url = "https://api.deepseek.com/v3.2_speciale_expires_on_20251215"
             self.api = "openai"
         elif self.api == "meta":
-            self.api_key = os.getenv("META_API_KEY")
-            self.base_url = "https://api.llama.com/v1alpha"
+            self.api_key = (
+                os.getenv(self.api_key_env) if self.api_key_env is not None
+                else os.getenv("META_API_KEY") or os.getenv("MODEL_API_KEY")
+            )
+            self.base_url = self.base_url or "https://api.meta.ai/v1"
             self.api = "openai"
         elif self.api == "openrouter":
             self.api_key = os.getenv("OPENROUTER_API_KEY")
@@ -1490,6 +1497,13 @@ class APIClient:
         else:
             return self._openai_query_chat_completions_api(client, idx, query, ignore_tool_calls=ignore_tool_calls)
 
+    @staticmethod
+    def _normalize_openai_response(response):
+        """Normalize compatible-provider dictionaries, including nested output and usage."""
+        if isinstance(response, dict):
+            return Response.model_construct(**response)
+        return response
+
     def _openai_query_responses_api(self, client, idx, messages, ignore_tool_calls=False):
         """Queries the OpenAI API with the responses API.
 
@@ -1545,16 +1559,33 @@ class APIClient:
                     }
                     if self.background:
                         payload["background"] = self.background
+                    if self.stream_openai_responses:
+                        payload["stream"] = True
                     ts = time.strftime("%m%d-%H:%M:%S", time.localtime(time.time()))
                     ts += f".{datetime.now().microsecond:06d}"
                     info = {"nb_executed_tool_calls": nb_executed_tool_calls, "n_retries": n_retries}
                     request_logger.log_request(ts=ts, batch_idx=idx, request=payload, **info)
-                    response = client.responses.create(**payload)
+                    if self.stream_openai_responses:
+                        with client.responses.create(**payload) as events:
+                            for event in events:
+                                if event.type in {"response.completed", "response.incomplete"}:
+                                    # Terminal events include full output and usage, even at the token limit.
+                                    response = self._normalize_openai_response(event.response)
+                                elif event.type == "response.failed":
+                                    failed_response = self._normalize_openai_response(event.response)
+                                    request_logger.log_response(ts=ts, batch_idx=idx, response=failed_response.model_dump())
+                                    raise ValueError(f"Responses stream failed: {failed_response.error}")
+                                elif event.type == "error":
+                                    raise ValueError(f"Responses stream error: {event.message}")
+                        if response is None:
+                            raise ValueError("Responses stream ended without a completed or incomplete response.")
+                    else:
+                        response = self._normalize_openai_response(client.responses.create(**payload))
                     if self.background:
                         time_start = time.time()
                         while response.status in {"queued", "in_progress"}:
                             time.sleep(60)
-                            response = client.responses.retrieve(response.id)
+                            response = self._normalize_openai_response(client.responses.retrieve(response.id))
                             if time.time() - time_start > self.timeout:
                                 raise TimeoutError("Timeout waiting for background response.")
                         request_logger.log_response(ts=ts, batch_idx=idx, response=response.model_dump())
@@ -1567,7 +1598,10 @@ class APIClient:
                 except Exception as e:
                     if "rate limit" not in str(e).lower() and "429" not in str(e):
                         total_retries += 1
-                    request_logger.log_response(ts=ts, batch_idx=idx, exception={"exception": str(e)})
+                    request_logger.log_response(
+                        ts=ts, batch_idx=idx,
+                        exception={"exception": str(e), "traceback": traceback.format_exc()},
+                    )
                     time.sleep(60)
                     logger.error(f"Got OpenAI error in responses api inner. Exception: {e}")
                     response = None

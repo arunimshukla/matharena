@@ -1,5 +1,15 @@
 model: deepseek-v4-flash
 api: deepseek
+# Deep Code runs locally; DEEPSEEK_API_KEY pays for the official DeepSeek API.
+harness: deepcode
+harness_version: "0.3.1"
+harness_config:
+  auth: api
+  container_executable: deepcode
+  cpu_limit: 4
+  memory_gb: 12
+  pids_limit: 768
+  tmpfs_size: 1g
 max_tokens: 384000
 temperature: 1
 top_p: 1

@@ -120,11 +120,14 @@ if __name__ == "__main__":
                     for j in range(len(data["judgment"])):
                         if data["judgment"][j] is None:
                             continue
+                        judgment = data["judgment"][j][i]
+                        if judgment is None:
+                            continue
                         extra_dict_judge = {
-                            f"points_judge_{j+1}": data["judgment"][j][i]["points"],
-                            f"grading_details_judge_{j+1}": data["judgment"][j][i]["details"],
-                            f"error_judge_{j+1}": data["judgment"][j][i]["error"] if "error" in data["judgment"][j][i] else None,
-                            f"max_points_judge_{j+1}": data["judgment"][j][i]["max_points"],
+                            f"points_judge_{j+1}": judgment["points"],
+                            f"grading_details_judge_{j+1}": judgment["details"],
+                            f"error_judge_{j+1}": judgment.get("error"),
+                            f"max_points_judge_{j+1}": judgment["max_points"],
                         }
                         extra_dict.update(extra_dict_judge)
 

@@ -1,0 +1,28 @@
+model: moonshotai/kimi-k3
+api: openrouter
+harness: kimi
+harness_config:
+  auth: api
+  container_executable: kimi
+max_tokens: 1000000
+temperature: 1.0
+concurrent_requests: 16
+read_cost: 3.0
+top_p: 0.95
+cache_read_cost: 0.3
+write_cost: 15.0
+context_limit: 1000000
+human_readable_id: Kimi K3 (Think)
+date: "2026-07-16"
+reasoning_effort: max
+extra_body:
+  provider:
+    allow_fallbacks: False
+    order:
+    - moonshotai
+other_params:
+  open: true
+  creator: Moonshot AI
+  parameters: 2800
+  active_parameters: 50
+  huggingface_id: moonshotai/Kimi-K3

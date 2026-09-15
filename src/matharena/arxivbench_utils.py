@@ -56,6 +56,15 @@ def load_prompt_template(path):
         return f.read()
 
 
+def conversation_response_text(conversation):
+    from matharena.utils import normalize_conversation
+
+    normalized = normalize_conversation(conversation)
+    if normalized and isinstance(normalized[-1], dict):
+        return normalized[-1].get("content", "") or ""
+    return ""
+
+
 def list_paper_ids(paper_root):
     if not os.path.isdir(paper_root):
         return []
@@ -323,7 +332,3 @@ def get_latest_fields(annotation, fields):
             return None
         values.append(str(value).strip())
     return tuple(values)
-
-
-def get_latest_pair(annotation):
-    return get_latest_fields(annotation, ["question", "answer"])

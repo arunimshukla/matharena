@@ -1,9 +1,9 @@
 """Codex CLI solver for Lean benchmarks.
 
 This runs the Codex CLI in a Docker container whose writable filesystem is a
-single per-problem workspace.  The container gets read/write access to the
-compiled Lean ``.lake`` cache and read-only access to elan, but it does not get
-the MathArena repository, datasets, outputs, or neighboring problems.
+single per-problem workspace. The recommended image contains a read-only Lean
+environment and denies model-generated commands access to both the network and
+the separately mounted Codex credentials.
 """
 
 from __future__ import annotations
@@ -29,11 +29,12 @@ CONTAINER_WORKDIR = "/work"
 CONTAINER_TMPDIR = "/tmp"
 CONTAINER_ELAN_HOME = "/elan"
 CONTAINER_LEAN_CACHE = "/mathlib-cache"
+CONTAINER_CODEX_HOME = "/run/codex-home"
 CONTAINER_BASE_PATH = (
     f"{CONTAINER_ELAN_HOME}/bin:"
     "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 )
-DEFAULT_DOCKER_IMAGE = "proofstack-sandbox:latest"
+DEFAULT_DOCKER_IMAGE = "matharena-codex-arxivlean:lean4.31-codex0.145.0"
 DEFAULT_WORKSPACE_ROOT = "logs/codex_workspaces/{competition}/{solver_name}/p{problem_idx}_r{run_idx}"
 DEFAULT_PACKAGE_ORDER = [
     "Cli",
@@ -82,14 +83,22 @@ class CodexCLISolver(BaseSolver):
         self.docker_image = str(self.config.get("docker_image") or DEFAULT_DOCKER_IMAGE)
         self.docker_network = str(self.config.get("docker_network") or "bridge")
         self.check_docker_network = str(self.config.get("check_docker_network") or "none")
-        self.timeout_s = int(self.config.get("timeout_s") or self.config.get("max_seconds") or 3600)
+        self.timeout_s = int(self.config.get("timeout_s") or self.config.get("max_seconds") or 28_800)
         self.cpu_limit = self.config.get("cpu_limit", 2)
         self.memory_gb = self.config.get("memory_gb", 8)
         self.pids_limit = int(self.config.get("pids_limit") or 512)
         self.tmpfs_size = str(self.config.get("tmpfs_size") or "1g")
         self.copy_codex_auth = bool(self.config.get("copy_codex_auth", True))
+        self.codex_auth_path = Path(
+            str(self.config.get("codex_auth_path") or Path.home() / ".codex" / "auth.json")
+        ).expanduser().resolve()
         self.keep_workspaces = bool(self.config.get("keep_workspaces", True))
+        self.lean_runtime = str(self.config.get("lean_runtime") or "host").lower()
+        if self.lean_runtime not in {"host", "image"}:
+            raise ValueError("lean_runtime must be either 'host' or 'image'.")
+        self.lean_cache_volume = self.config.get("lean_cache_volume")
         self.cache_read_only = bool(self.config.get("cache_read_only", False))
+        self.read_only_rootfs = bool(self.config.get("read_only_rootfs", False))
         self.emit_empty_on_failure = bool(self.config.get("emit_empty_on_failure", False))
         self.run_check_after_codex = bool(self.config.get("run_check_after_codex", True))
         self.cmd = _coerce_cmd(self.config.get("cmd") or ["codex", "exec", "--json"])
@@ -164,13 +173,18 @@ class CodexCLISolver(BaseSolver):
         prompt = self.build_prompt(payload)
         workspace = self._workspace_for(problem_idx, run_idx)
         self._prepare_workspace(workspace, payload, prompt)
-        auth_copied = False
+        codex_home = None
         if self.copy_codex_auth and _is_codex_exec_cmd(self.cmd):
-            auth_copied = self._copy_codex_auth(workspace)
+            codex_home = self._stage_codex_auth(workspace)
 
         logger.info(f"Starting Codex CLI run for P{problem_idx} r{run_idx} in {workspace}")
         try:
-            result = self._run_in_docker(workspace, self.cmd, prompt if self.send_prompt_stdin else None)
+            result = self._run_in_docker(
+                workspace,
+                self.cmd,
+                prompt if self.send_prompt_stdin else None,
+                codex_home=codex_home,
+            )
             self._write_run_logs(workspace, result)
             if self.run_check_after_codex:
                 check = self._run_in_docker(
@@ -182,8 +196,8 @@ class CodexCLISolver(BaseSolver):
                 )
                 self._write_run_logs(workspace, check, stem="check")
         finally:
-            if auth_copied:
-                shutil.rmtree(workspace / ".codex-home", ignore_errors=True)
+            if codex_home is not None:
+                shutil.rmtree(codex_home, ignore_errors=True)
 
         solution_text = _read_text(workspace / "Solution.lean")
         if self.emit_empty_on_failure and result.returncode != 0:
@@ -201,7 +215,7 @@ class CodexCLISolver(BaseSolver):
                 "step": "codex_cli",
                 "timestep": 0,
                 "messages": conversation,
-                "workspace": str(workspace),
+                "workspace": _display_workspace_path(workspace),
                 "returncode": result.returncode,
                 "timed_out": result.timed_out,
                 "codex_events": codex_events,
@@ -274,19 +288,20 @@ class CodexCLISolver(BaseSolver):
         except OSError:
             pass
 
-    def _copy_codex_auth(self, workspace: Path) -> bool:
-        host_auth = Path.home() / ".codex" / "auth.json"
-        if not host_auth.exists():
-            logger.warning("copy_codex_auth is enabled, but ~/.codex/auth.json does not exist.")
-            return False
-        codex_home = workspace / ".codex-home"
-        codex_home.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(host_auth, codex_home / "auth.json")
+    def _stage_codex_auth(self, workspace: Path) -> Path | None:
+        if not self.codex_auth_path.exists():
+            logger.warning(
+                f"copy_codex_auth is enabled, but {self.codex_auth_path} does not exist."
+            )
+            return None
+        codex_home = workspace.parent / f".codex-auth-{uuid.uuid4().hex}"
+        codex_home.mkdir(mode=0o700, parents=True, exist_ok=False)
+        shutil.copyfile(self.codex_auth_path, codex_home / "auth.json")
         try:
             (codex_home / "auth.json").chmod(0o600)
         except OSError:
             pass
-        return True
+        return codex_home
 
     def _run_in_docker(
         self,
@@ -296,6 +311,7 @@ class CodexCLISolver(BaseSolver):
         *,
         timeout_s: int | None = None,
         docker_network: str | None = None,
+        codex_home: Path | None = None,
     ) -> DockerResult:
         container_name = f"matharena-codex-{uuid.uuid4().hex[:12]}"
         docker_cmd = self._docker_cmd(
@@ -304,6 +320,7 @@ class CodexCLISolver(BaseSolver):
             container_name,
             interactive=stdin_text is not None,
             docker_network=docker_network or self.docker_network,
+            codex_home=codex_home,
         )
         start = time.monotonic()
         proc = subprocess.Popen(
@@ -335,6 +352,7 @@ class CodexCLISolver(BaseSolver):
         *,
         interactive: bool,
         docker_network: str,
+        codex_home: Path | None,
     ) -> list[str]:
         lean_env = self._lean_env()
         args = ["docker", "run", "--rm", "--name", container_name]
@@ -349,22 +367,20 @@ class CodexCLISolver(BaseSolver):
             str(self.pids_limit),
             "--cap-drop",
             "ALL",
+            "--security-opt",
+            "no-new-privileges:true",
             "--network",
             docker_network,
             "--user",
             f"{os.getuid()}:{os.getgid()}",
             "-v",
             f"{workspace}:{CONTAINER_WORKDIR}",
-            "-v",
-            f"{self.host_elan_home}:{CONTAINER_ELAN_HOME}:ro",
-            "-v",
-            f"{self.host_lake_cache}:{CONTAINER_LEAN_CACHE}/.lake{':ro' if self.cache_read_only else ''}",
             "-w",
             CONTAINER_WORKDIR,
             "--tmpfs",
-            f"{CONTAINER_TMPDIR}:size={self.tmpfs_size},mode=1777",
+            f"{CONTAINER_TMPDIR}:rw,nosuid,nodev,size={self.tmpfs_size},mode=1777",
             "-e",
-            f"HOME={CONTAINER_WORKDIR}",
+            f"HOME={CONTAINER_TMPDIR}",
             "-e",
             f"TMPDIR={CONTAINER_TMPDIR}",
             "-e",
@@ -372,8 +388,24 @@ class CodexCLISolver(BaseSolver):
             "-e",
             f"ELAN_HOME={CONTAINER_ELAN_HOME}",
             "-e",
-            f"CODEX_HOME={CONTAINER_WORKDIR}/.codex-home",
+            f"CODEX_HOME={CONTAINER_CODEX_HOME if codex_home is not None else CONTAINER_TMPDIR + '/codex-home'}",
         ]
+        if self.read_only_rootfs:
+            args.append("--read-only")
+        if codex_home is not None:
+            args += ["-v", f"{codex_home}:{CONTAINER_CODEX_HOME}"]
+        if self.lean_runtime == "host":
+            args += [
+                "-v",
+                f"{self.host_elan_home}:{CONTAINER_ELAN_HOME}:ro",
+                "-v",
+                f"{self.host_lake_cache}:{CONTAINER_LEAN_CACHE}/.lake{':ro' if self.cache_read_only else ''}",
+            ]
+        elif self.lean_cache_volume:
+            args += [
+                "-v",
+                f"{self.lean_cache_volume}:{CONTAINER_LEAN_CACHE}{':ro' if self.cache_read_only else ''}",
+            ]
         for key, value in lean_env.items():
             args += ["-e", f"{key}={value}"]
         for extra_arg in self.config.get("docker_extra_args") or []:
@@ -483,10 +515,13 @@ def _command_with_codex_options(
         cmd = _with_codex_model(cmd, str(model))
     if reasoning_effort:
         cmd = _with_codex_reasoning_effort(cmd, str(reasoning_effort))
-    if codex_sandbox.lower() in {"auto", "docker-bypass", "bypass"} and not _has_codex_sandbox_flag(cmd):
+    sandbox = codex_sandbox.lower()
+    if sandbox in {"docker-bypass", "bypass"} and not _has_codex_sandbox_flag(cmd):
         cmd = _insert_before_prompt(cmd, ["--dangerously-bypass-approvals-and-sandbox"])
-    elif codex_sandbox.lower() in {"workspace", "workspace-write"} and not _has_codex_sandbox_flag(cmd):
+    elif sandbox in {"auto", "workspace", "workspace-write"} and not _has_codex_sandbox_flag(cmd):
         cmd = _insert_before_prompt(cmd, ["--sandbox", "workspace-write"])
+    elif sandbox not in {"permissions", "permission-profile", "managed"}:
+        raise ValueError(f"Unsupported codex_sandbox value: {codex_sandbox}")
     if _codex_prompt_arg_index(cmd) is None:
         cmd.append("-")
     return cmd
@@ -569,6 +604,8 @@ def _codex_prompt_arg_index(cmd: list[str]) -> int | None:
         "--add-dir",
         "--output-schema",
         "--color",
+        "-a",
+        "--ask-for-approval",
         "-o",
         "--output-last-message",
     }
@@ -583,6 +620,7 @@ def _codex_prompt_arg_index(cmd: list[str]) -> int | None:
         "--add-dir",
         "--output-schema",
         "--color",
+        "--ask-for-approval",
         "--output-last-message",
     }
     while i < len(cmd):
@@ -633,7 +671,7 @@ def _toolchain_dir(project_root: Path) -> str:
         return "leanprover--lean4---" + raw.split(":", 1)[1]
     if raw:
         return raw.replace("/", "--").replace(":", "---")
-    return "leanprover--lean4---v4.29.0"
+    return "leanprover--lean4---v4.31.0"
 
 
 def _parse_codex_jsonl(text: str) -> CodexUsage:
@@ -821,6 +859,13 @@ def _read_text(path: Path) -> str:
         return path.read_text(encoding="utf-8", errors="replace")
     except OSError:
         return ""
+
+
+def _display_workspace_path(workspace: Path) -> str:
+    try:
+        return str(workspace.relative_to(Path.cwd()))
+    except ValueError:
+        return workspace.name
 
 
 def _write_text(path: Path, content: str) -> None:

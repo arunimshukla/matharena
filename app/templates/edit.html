@@ -261,7 +261,7 @@
             if (box.dataset.proofIdx !== undefined) {
                 payload.proof_idx = Number(box.dataset.proofIdx);
             }
-            const response = await fetch('/edit/save', {
+            const response = await fetch({{ url_for('edit_save') | tojson }}, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)

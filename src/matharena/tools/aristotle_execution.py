@@ -11,8 +11,8 @@ from aristotlelib.api_request import AristotleAPIError
 from matharena.tools.lean_execution import get_lean_feedback_dict_with_formal_statement
 
 
-DEFAULT_ARISTOTLE_TOOLCHAIN = "leanprover/lean4:v4.28.0"
-DEFAULT_ARISTOTLE_MATHLIB_REV = "v4.28.0"
+DEFAULT_ARISTOTLE_TOOLCHAIN = "leanprover/lean4:v4.31.0"
+DEFAULT_ARISTOTLE_MATHLIB_REV = "v4.31.0"
 DEFAULT_ARISTOTLE_POLLING_INTERVAL_SECONDS = 30
 ARISTOTLE_PROBLEM_FILE = "Problem.lean"
 

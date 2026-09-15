@@ -1,0 +1,28 @@
+model: gemini-3.8-flash
+api: google
+harness: kimi
+harness_version: "0.40.1"
+concurrent_requests: 16
+max_tokens: 65536
+cache_read_cost: 0.075
+read_cost: 0.75
+tool_choice: auto
+write_cost: 3.75
+human_readable_id: Gemini 3.8 Flash (Kimi Code)
+date: "2026-09-02"
+reasoning_effort: high
+other_params:
+  open: false
+  creator: Google
+
+harness_config:
+  auth: api
+  container_executable: kimi
+  cpu_limit: 4
+  memory_gb: 12
+  pids_limit: 768
+  tmpfs_size: 1g
+  environment:
+    KIMI_MODEL_MAX_CONTEXT_SIZE: "1048576"
+    # Avoid the filesystem-watcher limit encountered on the shared host.
+    CHOKIDAR_USEPOLLING: "1"

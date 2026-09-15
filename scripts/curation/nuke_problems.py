@@ -33,6 +33,7 @@ from typing import Any, Dict, List, Set
 from matharena.json_zst import OUTPUT_JSON_SUFFIX, dump_json_zst, load_json_zst
 
 TEXT_DIRECTORIES = ("problems", "original", "proofs")
+PROBLEM_EXTENSIONS = (".tex", ".png", ".lean")
 
 
 def renumber_rows(rows: List[Dict[str, Any]]) -> None:
@@ -90,7 +91,14 @@ def count_files(directory: str) -> int:
 
 
 def load_problem_ids(problems_dir: str) -> Set[int]:
-    return set(range(1, count_files(problems_dir) + 1))
+    directory = Path(problems_dir)
+    if not directory.exists():
+        return set()
+    return {
+        int(path.stem)
+        for path in directory.iterdir()
+        if path.is_file() and path.suffix in PROBLEM_EXTENSIONS and path.stem.isdigit()
+    }
 
 
 def parse_problem_ids(problem_ids: List[str]) -> Set[int]:
@@ -306,7 +314,7 @@ def update_csv_files(source_csv_path: str, source_metadata_csv_path: str, answer
                     grading_scheme_rows.append(row)
                 else:
                     grading_scheme_rows_to.append(row)
-    else:
+    elif os.path.exists(answers_csv_path):
         with open(answers_csv_path, 'r', encoding='utf-8') as f:
             reader = csv.DictReader(f)
             for row in reader:
@@ -357,6 +365,10 @@ def update_csv_files(source_csv_path: str, source_metadata_csv_path: str, answer
                 json.dump(target_rows, f, indent=4, ensure_ascii=False)
         return len(grading_scheme_rows)
 
+    # Lean datasets use formal statements as answers, with no answers.csv.
+    if not os.path.exists(answers_csv_path):
+        return len(source_rows) if has_source_csv else len(source_metadata_rows)
+
     # Write back answers.csv
     write_csv_rows(answers_csv_path, ["id", "answer"], answers_rows)
 
@@ -392,47 +404,28 @@ def update_problems_directory(problems_dir: str, ids_to_remove: Set[int],
             print(f"Removed {lean_file}")
     
     # Create mapping of old IDs to new IDs
-    existing_files = []
-    for tex_file in problems_path.glob("*.tex"):
-        old_id = int(tex_file.stem)
-        if old_id not in ids_to_remove:
-            existing_files.append((old_id, tex_file))
-    
-    # Sort by old ID to maintain order
-    existing_files.sort(key=lambda x: x[0])
+    # Each format can exist independently, including Lean-only statements or images.
+    existing_files = sorted(
+        (int(path.stem), path)
+        for path in problems_path.iterdir()
+        if path.is_file() and path.suffix in PROBLEM_EXTENSIONS and path.stem.isdigit()
+    )
     
     # Rename files to temporary names first to avoid conflicts
     temp_files = []
-    for new_id, (old_id, old_file) in enumerate(existing_files, 1):
-        temp_name = problems_path / f"temp_{new_id}.tex"
+    for old_id, old_file in existing_files:
+        # Preserve gaps in optional proofs/images, just as in model outputs.
+        new_id = old_id - sum(removed_id < old_id for removed_id in ids_to_remove)
+        if new_id == old_id:
+            continue
+        temp_name = problems_path / f"temp_{new_id}{old_file.suffix}"
         old_file.rename(temp_name)
-        temp_files.append((new_id, temp_name))
-        old_file_png = problems_path / f"{old_id}.png"
-        if old_file_png.exists():
-            temp_name_png = problems_path / f"temp_{new_id}.png"
-            old_file_png.rename(temp_name_png)
-            print(f"Renamed {old_file_png} to {temp_name_png}")
-        old_file_lean = problems_path / f"{old_id}.lean"
-        if old_file_lean.exists():
-            temp_name_lean = problems_path / f"temp_{new_id}.lean"
-            old_file_lean.rename(temp_name_lean)
-            print(f"Renamed {old_file_lean} to {temp_name_lean}")
+        temp_files.append((temp_name, problems_path / f"{new_id}{old_file.suffix}"))
     
     # Rename from temporary names to final names
-    for new_id, temp_file in temp_files:
-        final_file = problems_path / f"{new_id}.tex"
+    for temp_file, final_file in temp_files:
         temp_file.rename(final_file)
-        print(f"Renamed problem file to {new_id}.tex")
-        temp_file_png = problems_path / f"temp_{new_id}.png"
-        if temp_file_png.exists():
-            final_file_png = problems_path / f"{new_id}.png"
-            temp_file_png.rename(final_file_png)
-            print(f"Renamed image file to {new_id}.png")
-        temp_file_lean = problems_path / f"temp_{new_id}.lean"
-        if temp_file_lean.exists():
-            final_file_lean = problems_path / f"{new_id}.lean"
-            temp_file_lean.rename(final_file_lean)
-            print(f"Renamed Lean file to {new_id}.lean")
+        print(f"Renamed problem file to {final_file.name}")
 
     if problems_dir_to:
         problems_path_to = Path(problems_dir_to)
@@ -495,7 +488,10 @@ def update_json_outputs(outputs_dir: str, ids_to_remove: Set[int],
             
             # Process each file: update idx and rename
             temp_files = []
-            for new_id, (old_id, old_file) in enumerate(existing_files, 1):
+            for old_id, old_file in existing_files:
+                # Missing runs must remain gaps. Only removed dataset IDs
+                # shift the numbering, even for incomplete output folders.
+                new_id = old_id - sum(removed_id < old_id for removed_id in ids_to_remove)
                 # Read and update JSON content
                 try:
                     data = load_json_zst(old_file)

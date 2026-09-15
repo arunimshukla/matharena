@@ -1,48 +1,72 @@
 type: codex_cli
-human_readable_id: Codex CLI Pro (arxivlean)
+human_readable_id: GPT-5.6-Sol (max, via Codex)
+date: "2026-07-09"
+other_params:
+  analysis_id: openai/gpt-56-sol
+  open: false
+  creator: OpenAI
 
-# Codex CLI model/reasoning defaults for this benchmark.
-model: gpt-5.5
-model_reasoning_effort: xhigh
+# This uses saved ChatGPT/Codex authentication, not API-key billing.
+model: gpt-5.6-sol
+model_reasoning_effort: max
+read_cost: 5
+cache_read_cost: 0.5
+write_cost: 30
 cmd:
   - codex
+  - --ask-for-approval
+  - never
   - exec
   - --json
   - --ephemeral
   - --ignore-user-config
   - --ignore-rules
   - --skip-git-repo-check
+  - --strict-config
+  - --config
+  - web_search="disabled"
+  - --config
+  - agents.enabled=false
+  - --config
+  - shell_environment_policy.inherit="all"
 
-# Codex CLI must be able to reach OpenAI when using a Pro account. Set this to
-# "none" only for non-Codex smoke commands; real Codex runs cannot work offline.
+# The Codex process needs OpenAI access. The image's system requirements deny
+# network access to every command that the model launches.
 docker_network: bridge
 check_docker_network: none
-docker_image: proofstack-sandbox:latest
-codex_sandbox: auto
+docker_image: matharena-codex-arxivlean:lean4.31-codex0.145.0
+codex_sandbox: permissions
 copy_codex_auth: true
-concurrent_requests: 4
-timeout_s: 7200
+concurrent_requests: 2
+timeout_s: 28800
 cpu_limit: 4
 memory_gb: 12
 pids_limit: 768
 tmpfs_size: 1g
+read_only_rootfs: true
+# Codex's Linux command sandbox uses an unprivileged user namespace. Docker's
+# default seccomp profile blocks its setup; capabilities remain fully dropped.
+docker_extra_args:
+  - --security-opt
+  - seccomp=unconfined
+  - --security-opt
+  - systempaths=unconfined
 
-# The container sees only /work plus this .lake cache mount and read-only elan.
-lean_project_root: external/comparator_project
-lake_cache_root: external/comparator_project/.lake
-elan_home: ~/.elan
-cache_read_only: false
+# Lean 4.31 is in the image; Mathlib 4.31 is mounted from a read-only volume.
+lean_runtime: image
+lean_cache_volume: matharena-lean431-cache
+lean_toolchain_dir: leanprover--lean4---v4.31.0
+cache_read_only: true
 workspace_root: logs/codex_workspaces/{competition}/{solver_name}/p{problem_idx}_r{run_idx}
 run_check_after_codex: true
 keep_workspaces: true
+# Report the standard API-equivalent token cost even though Codex uses
+# subscription authentication for this run.
 accounting_costs_from_usage: true
-cache_read_cost: 0.5
-read_cost: 5
-write_cost: 30
 
 custom_instructions:
-  arxivlean/march: |
-    You are proving one Lean theorem from the arxivlean benchmark using Lean v4.29.0 and Mathlib.
+  arxivlean/june: |
+    You are proving one Lean theorem from the ArXivLean benchmark using Lean 4.31.0 and Mathlib 4.31.0.
 
     You are in an isolated Docker workspace. The only problem-specific files available are in /work:
     - Problem.md contains the natural language statement and formal statement.
@@ -50,7 +74,8 @@ custom_instructions:
     - Solution.lean is the file you must edit.
     - check.sh runs `lean Solution.lean` using the mounted compiled Mathlib cache.
 
-    Do not use network resources. Do not add axioms, assumptions, `sorry`, `admit`, or weaker replacement statements.
+    Do not use network resources or attempt to inspect credentials, host paths, other problems, or previous model outputs.
+    Do not add axioms, assumptions, `sorry`, `admit`, or weaker replacement statements.
     You are not allowed to add any axioms except those already in Mathlib ({{propext, Quot.sound, Classical.choice}}).
     You may add helper lemmas or definitions above the theorem in Solution.lean.
     The final theorem statement in Solution.lean must exactly match the formal statement below, including names.

@@ -7,7 +7,7 @@ export AXLE_API_KEY=your_api_key_here
 
 ## Installing instructions for `loogle` tool
 
-### Install `loogle` for Lean `v4.29.0`
+### Install `loogle` for Lean `v4.31.0`
 Run these commands from the repository root:
 
 ```bash
@@ -16,16 +16,16 @@ cd external/loogle
 git checkout 36960b0
 ```
 
-Then patch `loogle` to use the final Lean `v4.29.0` release instead of the older release candidate:
+Then patch `loogle` to use Lean `v4.31.0`:
 
 1. In `external/loogle/lean-toolchain`, set:
 ```text
-leanprover/lean4:v4.29.0
+leanprover/lean4:v4.31.0
 ```
 
 2. In `external/loogle/lakefile.lean`, change the mathlib dependency from `master` to:
 ```lean
-require mathlib from git "https://github.com/leanprover-community/mathlib4" @ "v4.29.0"
+require mathlib from git "https://github.com/leanprover-community/mathlib4" @ "v4.31.0"
 ```
 
 Then build everything:
@@ -83,7 +83,7 @@ uv run python -c "from matharena.tools.lean_execution import lean_explore_search
 
 ## Installing instructions for `Comparator`
 
-Use upstream `leanprover/comparator` tag `v4.29.0`.
+Use upstream `leanprover/comparator` tag `v4.31.0`.
 
 ```bash
 bash arxivmath/scripts/lean/setup_comparator.sh
@@ -120,5 +120,5 @@ configs/models/aristotle/aristotle.yaml
 
 Notes:
 - this integration creates a fresh temporary Lean project for each problem
-- Aristotle is configured to use Lean `v4.28.0`
-- MathArena also overrides the Lean checker to `lean-4.28.0` for this model
+- Aristotle is configured to use Lean `v4.31.0`
+- MathArena also overrides the Lean checker to `lean-4.31.0` for this model

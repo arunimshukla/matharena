@@ -20,5 +20,6 @@ anthropic_betas:
 human_readable_id: Claude-Fable-5 (max)
 date: "2026-06-09"
 other_params:
+  analysis_id: anthropic/fable_5_max
   open: false
   creator: Anthropic

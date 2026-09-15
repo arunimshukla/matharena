@@ -376,3 +376,8 @@ def lists_differ(l1, l2):
         if l1[i] != l2[i]:
             return True
     return False
+
+
+def run_limit_exceeded(detailed_cost):
+    """An attempt with a terminal budget failure is always incorrect."""
+    return bool((detailed_cost.get("run_limits") or {}).get("exceeded"))

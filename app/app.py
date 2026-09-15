@@ -5,9 +5,10 @@ import csv
 import json
 import os
 import math
+from threading import RLock
 
 import yaml
-from flask import Flask, redirect, render_template, url_for, send_from_directory, request, abort, jsonify
+from flask import Flask, redirect, render_template, url_for, send_from_directory, request, abort, jsonify, g
 
 from matharena.configs import extract_existing_configs
 from matharena.json_zst import OUTPUT_JSON_SUFFIX, dump_json_zst, load_json_zst
@@ -289,6 +290,51 @@ sources = load_sources(current_comp)
 grading_records = load_grading_records(current_comp)
 
 app = Flask(__name__)
+# The viewer caches one competition in globals. Keep selection and use together,
+# including writes, so requests from different tabs cannot mix competitions.
+competition_lock = RLock()
+
+
+def select_competition(comp):
+    global current_comp, results, sources, grading_records
+    if comp not in all_comps and comp != current_comp:
+        abort(404, description="Competition not found.")
+    results = analyze_run(comp, args.models)
+    sources = load_sources(comp)
+    grading_records = load_grading_records(comp)
+    current_comp = comp
+
+
+@app.before_request
+def restore_competition():
+    if request.endpoint in (None, "static", "data_files"):
+        return
+    competition_lock.acquire()
+    g.competition_locked = True
+    if request.endpoint == "refresh":
+        return
+    comp = request.args.get("comp", current_comp)
+    if comp != current_comp:
+        select_competition(comp)
+    model = request.view_args.get("model")
+    if model is not None:
+        if model not in results:
+            abort(404, description="Model not found in this competition. Select the competition again from Home.")
+        problem = request.view_args.get("problem_name")
+        if problem is not None and (not problem.isdigit() or int(problem) not in results[model]):
+            abort(404, description="Problem not found in this competition.")
+
+
+@app.teardown_request
+def release_competition(_error):
+    if g.pop("competition_locked", False):
+        competition_lock.release()
+
+
+@app.url_defaults
+def retain_competition(endpoint, values):
+    if endpoint not in ("static", "data_files", "refresh"):
+        values.setdefault("comp", current_comp)
 
 
 def get_problem_stats(results, model, problem):
@@ -386,6 +432,10 @@ def get_model_stats(results, model):
     except Exception:
         stats["n_correct"] = 0
     stats["total_cost"] = sum([res[problem]["cost"]["cost"] for problem in res.keys()])
+    stats["cost_estimated"] = any(
+        cost.get("token_usage_recovery", {}).get("estimated", False)
+        for record in res.values() for cost in record.get("detailed_costs", [])
+    )
     if nb_problems == 0:
         stats["avg_accuracy"] = 0
     else:
@@ -411,6 +461,7 @@ def model_stats_to_html(stats):
         "n_solutions": stats["n_solutions"],
         "n_correct": stats["n_correct"] if isinstance(stats["n_correct"], int) else round(stats["n_correct"], 2),
         "total_cost": f"{stats['total_cost']:.2f}",
+        "cost_estimated": stats.get("cost_estimated", False),
         "problem_stats": problem_stats_html,
     }
 
@@ -421,15 +472,14 @@ def model_stats_to_html(stats):
 @app.route("/refresh/<comp>", defaults={"url": ""})
 @app.route("/refresh/<comp>/<path:url>")
 def refresh(comp, url):
-    global current_comp, results, sources, grading_records
-    current_comp = comp.replace("---", "/")
-    results = analyze_run(current_comp, args.models)
-    sources = load_sources(current_comp)
-    grading_records = load_grading_records(current_comp)
+    select_competition(comp.replace("---", "/"))
     print("Refreshed!")
     if not url:
         return redirect(url_for("index"))
-    return redirect("/view/" + url.replace(">>>", "/"))
+    if ">>>" in url:
+        model, problem_name = url.split(">>>", 1)
+        return redirect(url_for("problem_view", model=model, problem_name=problem_name))
+    return redirect(url_for("model_view", model=url))
 
 
 @app.route("/")
@@ -660,6 +710,8 @@ def _format_score_value(value):
 
 
 def _judgment_rows(raw_judgment):
+    if not isinstance(raw_judgment, list):
+        return [], False
     legacy_shape = bool(raw_judgment) and all(item is None or isinstance(item, dict) for item in raw_judgment)
     return ([raw_judgment] if legacy_shape else raw_judgment), legacy_shape
 
@@ -732,9 +784,10 @@ def get_run_judgments(res, run_idx):
             "original_judgment": entry.get("original_judgment"),
         }
         for judge_idx, judge_runs in enumerate(judgment_rows, start=1)
-        if judge_runs is not None
+        # Runs can be appended before the corresponding judgments are ready.
+        if isinstance(judge_runs, list) and 0 <= run_idx < len(judge_runs)
         for entry in [judge_runs[run_idx]]
-        if entry is not None
+        if isinstance(entry, dict)
     ]
 
 

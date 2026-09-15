@@ -1,0 +1,32 @@
+model: claude-fable-5-1
+api: anthropic
+harness: claude
+harness_version: "2.1.267"
+harness_config:
+  auth: api
+  max_recovery_attempts: 3
+  container_executable: claude
+  environment:
+    CLAUDE_CODE_MAX_OUTPUT_TOKENS: "128000"
+max_tokens: 300000
+concurrent_requests: 32
+temperature: null
+top_p: null
+cache_write_cost: 12.5
+cache_read_cost: 0.25
+read_cost: 10
+write_cost: 50
+thinking:
+  type: adaptive
+output_config:
+  effort: high
+cache_control:
+  type: ephemeral
+batch_processing: true
+anthropic_betas:
+  - output-300k-2026-03-24
+human_readable_id: Claude-Fable-5.1 (high)
+date: "2026-09-01"
+other_params:
+  open: false
+  creator: Anthropic

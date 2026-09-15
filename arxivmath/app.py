@@ -3,18 +3,26 @@ import argparse
 import json
 import os
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from flask import Flask, abort, redirect, render_template, request, session, url_for
+
+from matharena.arxivmath_source import paper_source_unavailable
+from matharena.arxivmath_source import (
+    FALSE_FINAL_FILENAME,
+    FINAL_ANNOTATION_FILENAME,
+    SCHEMA_VERSION,
+    FALSE_INVESTIGATION_FILENAME,
+    INVESTIGATION_FILENAME,
+    sync_review_annotation,
+    sha256_file,
+)
 
 
 APP_ROOT = os.path.dirname(os.path.abspath(__file__))
 PAPER_ROOT = os.path.join(APP_ROOT, "paper")
-ANNOTATION_FILENAME = "annotation.json"
-LLM_ANNOTATION_FILENAME = "llm_annotation.json"
-LLM_FALSE_FILENAME = "llm_metadata_false.json"
 LEAN_ANNOTATION_FILENAME = "metadata_lean_abstract.json"
-CHECK_ONLY = False
+ANNOTATION_FILENAME_OVERRIDE = None
 CHECK_ONLY_KEPT = False
 FALSE_MODE = False
 LEAN_MODE = False
@@ -22,6 +30,10 @@ LEAN_MODE = False
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-secret")
 SKIPPED_BY_SESSION = {}
+
+
+def utc_now():
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def get_field_specs():
@@ -50,78 +62,41 @@ def get_field_specs():
             },
         ]
     if FALSE_MODE:
-        return [
-            {
-                "name": "original_statement",
-                "label": "Original statement",
-                "placeholder": "Extract the original theorem statement.",
-                "empty_text": "No original statement entered yet.",
-                "height": 220,
-            },
-            {
-                "name": "perturbed_statement",
-                "label": "Perturbed statement",
-                "placeholder": "Write the plausible false perturbation.",
-                "empty_text": "No perturbed statement entered yet.",
-                "height": 220,
-            },
-            {
-                "name": "falsity_explanation",
-                "label": "Why false given the original",
-                "placeholder": "Explain why the perturbed statement is false in light of the original statement.",
-                "empty_text": "No falsity explanation entered yet.",
-                "height": 180,
-            },
-        ]
+        fields = (
+            ("true_statement", "True statement"),
+            ("false_statement", "False statement"),
+            ("falsity_explanation", "Reference refutation"),
+        )
+    else:
+        fields = (("question", "Question"), ("answer", "Answer"))
     return [
-        {
-            "name": "question",
-            "label": "Question to extract",
-            "placeholder": "What question should we extract from this entry?",
-            "empty_text": "No question entered yet.",
-            "height": 300,
-        },
-        {
-            "name": "answer",
-            "label": "Verifiable answer",
-            "placeholder": "Provide the unique, verifiable answer.",
-            "empty_text": "No answer entered yet.",
-            "height": 160,
-        },
+        {"name": name, "label": label, "empty_text": "No content available.", "editable": False}
+        for name, label in fields
     ]
 
 
-def is_annotated(paper_id):
-    annotation = load_annotation(paper_id)
-    return annotation.get("status") in {"keep", "discard"}
-
-
-def list_paper_ids(
-    include_annotated=False, check_only=False, check_only_kept=False, skip_ids=None
-):
+def list_paper_ids(check_only_kept=False):
     if not os.path.isdir(PAPER_ROOT):
         return []
-    skip_set = set(skip_ids or [])
     paper_ids = []
     for name in os.listdir(PAPER_ROOT):
         meta_path = os.path.join(PAPER_ROOT, name, "metadata.json")
-        if os.path.isfile(meta_path):
-            if name in skip_set:
+        if not os.path.isfile(meta_path):
+            continue
+        annotation = load_annotation(name)
+        if not (LEAN_MODE):
+            if annotation.get("source_first_schema_version") != SCHEMA_VERSION:
                 continue
-            annotation = load_annotation(name, check_only=check_only)
-            if check_only:
-                if annotation.get("keep") is True:
-                    review = annotation.get("review")
-                    review_status = review.get("status") if isinstance(review, dict) else None
-                    if check_only_kept:
-                        if review_status == "keep" or not review_status:
-                            paper_ids.append(name)
-                    else:
-                        if review_status not in {"keep", "discard"}:
-                            paper_ids.append(name)
-            else:
-                if include_annotated or annotation.get("status") not in {"keep", "discard"}:
-                    paper_ids.append(name)
+            if paper_source_unavailable(os.path.join(PAPER_ROOT, name)):
+                continue
+        if annotation.get("keep") is not True:
+            continue
+        review = annotation.get("review")
+        status = review.get("status") if isinstance(review, dict) else None
+        if (check_only_kept and (status == "keep" or not status)) or (
+            not check_only_kept and status not in {"keep", "discard"}
+        ):
+            paper_ids.append(name)
     return sorted(paper_ids)
 
 
@@ -133,24 +108,30 @@ def load_metadata(paper_id):
         return json.load(f)
 
 
-def load_annotation(paper_id, check_only=False):
+def annotation_filename():
+    if ANNOTATION_FILENAME_OVERRIDE:
+        return ANNOTATION_FILENAME_OVERRIDE
     if LEAN_MODE:
-        filename = LEAN_ANNOTATION_FILENAME
-    else:
-        filename = LLM_FALSE_FILENAME if FALSE_MODE else LLM_ANNOTATION_FILENAME if check_only else ANNOTATION_FILENAME
-    path = os.path.join(PAPER_ROOT, paper_id, filename)
+        return LEAN_ANNOTATION_FILENAME
+    return FALSE_FINAL_FILENAME if FALSE_MODE else FINAL_ANNOTATION_FILENAME
+
+
+def load_annotation(paper_id):
+    if not (LEAN_MODE):
+        return sync_review_annotation(
+            os.path.join(PAPER_ROOT, paper_id),
+            investigation_filename=FALSE_INVESTIGATION_FILENAME if FALSE_MODE else INVESTIGATION_FILENAME,
+            final_filename=annotation_filename(),
+        )
+    path = os.path.join(PAPER_ROOT, paper_id, annotation_filename())
     if not os.path.isfile(path):
         return {}
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
 
 
-def save_annotation(paper_id, data, check_only=False):
-    if LEAN_MODE:
-        filename = LEAN_ANNOTATION_FILENAME
-    else:
-        filename = LLM_FALSE_FILENAME if FALSE_MODE else LLM_ANNOTATION_FILENAME if check_only else ANNOTATION_FILENAME
-    path = os.path.join(PAPER_ROOT, paper_id, filename)
+def save_annotation(paper_id, data):
+    path = os.path.join(PAPER_ROOT, paper_id, annotation_filename())
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, sort_keys=True)
 
@@ -179,38 +160,50 @@ def get_session_skips():
 
 @app.route("/")
 def index():
-    skip_ids = get_session_skips() if not CHECK_ONLY else []
-    paper_ids = list_paper_ids(
-        check_only=CHECK_ONLY,
-        check_only_kept=CHECK_ONLY_KEPT,
-        skip_ids=skip_ids,
-    )
+    paper_ids = list_paper_ids(check_only_kept=CHECK_ONLY_KEPT)
     if not paper_ids:
-        return "No papers found in ./paper.", 200
+        benchmark = (
+            "BrokenArXiv"
+            if FALSE_MODE
+            else "ArXivLean" if LEAN_MODE else "ArXivMath"
+        )
+        message = f"No {benchmark} items awaiting human review in {PAPER_ROOT}.\n"
+        if not (LEAN_MODE):
+            message += "Verified items appear here automatically. Refresh this page as verification finishes.\n"
+            if not FALSE_MODE:
+                message += "For BrokenArXiv items, launch the app with --false.\n"
+        message += "Use --check-kept to revisit items you already accepted."
+        return app.response_class(message, mimetype="text/plain")
     return redirect(url_for("paper_view", paper_id=paper_ids[0]))
 
 
 @app.route("/paper/<paper_id>")
 def paper_view(paper_id):
-    if not CHECK_ONLY and is_annotated(paper_id):
-        skip_ids = get_session_skips()
-        paper_ids = list_paper_ids(check_only=CHECK_ONLY, skip_ids=skip_ids)
-        if not paper_ids:
-            return redirect(url_for("done"))
-        return redirect(url_for("paper_view", paper_id=paper_ids[0]))
-    skip_ids = get_session_skips() if not CHECK_ONLY else []
-    paper_ids = list_paper_ids(
-        check_only=CHECK_ONLY,
-        check_only_kept=CHECK_ONLY_KEPT,
-        skip_ids=skip_ids,
-    )
+    paper_ids = list_paper_ids(check_only_kept=CHECK_ONLY_KEPT)
     if paper_id not in paper_ids:
         abort(404)
     metadata = load_metadata(paper_id)
     if metadata is None:
         abort(404)
-    annotation = load_annotation(paper_id, check_only=CHECK_ONLY)
-    if CHECK_ONLY:
+    annotation = load_annotation(paper_id)
+    source_details = None
+    if not (LEAN_MODE):
+        source_first = annotation.get("source_first") or {}
+        source_details = {
+            "basis_summary": annotation.get("basis_summary") or source_first.get("basis_summary"),
+            "novelty_type": source_first.get("novelty_type"),
+            "importance": source_first.get("importance"),
+            "refutation_status": source_first.get("refutation_status"),
+            "prior_claim": source_first.get("prior_claim"),
+            "new_result": source_first.get("new_result"),
+            "evidence": source_first.get("evidence") or [],
+            "verification": source_first.get("verification") or {},
+            "difficulty_rationale": annotation.get("difficulty_rationale"),
+            "plausibility_rationale": annotation.get("plausibility_rationale"),
+            "easy_refutation_audit": annotation.get("easy_refutation_audit"),
+            "review_binding": source_first.get("review_binding"),
+        }
+    if LEAN_MODE:
         review = annotation.get("review")
         if isinstance(review, dict):
             annotation = annotation.copy()
@@ -230,8 +223,9 @@ def paper_view(paper_id):
         prev_id=prev_id,
         position=index + 1,
         total=len(paper_ids),
-        check_only=CHECK_ONLY,
         field_specs=get_field_specs(),
+        source_details=source_details,
+        false_mode=FALSE_MODE,
     )
 
 
@@ -240,51 +234,37 @@ def annotate(paper_id):
     if load_metadata(paper_id) is None:
         abort(404)
     status = request.form.get("status", "").strip().lower()
-    field_values = {
-        field["name"]: (request.form.get(field["name"]) or "").strip()
-        for field in get_field_specs()
-    }
     if status not in {"keep", "discard"}:
-        status = ""
-    if CHECK_ONLY:
-        paper_ids_before = list_paper_ids(
-            check_only=True,
-            check_only_kept=CHECK_ONLY_KEPT,
-        )
-        index = paper_ids_before.index(paper_id) if paper_id in paper_ids_before else -1
-        annotation = load_annotation(paper_id, check_only=True)
-        review_status = status if status in {"keep", "discard"} else "keep"
-        annotation["review"] = {
-            "status": review_status,
-            **field_values,
-            "updated_at": datetime.utcnow().isoformat() + "Z",
-        }
-        save_annotation(paper_id, annotation, check_only=True)
-        paper_ids_after = list_paper_ids(
-            check_only=True,
-            check_only_kept=CHECK_ONLY_KEPT,
-        )
-        if paper_ids_after:
-            if index >= 0:
-                for candidate in paper_ids_before[index + 1 :]:
-                    if candidate in paper_ids_after:
-                        return redirect(url_for("paper_view", paper_id=candidate))
-            return redirect(url_for("paper_view", paper_id=paper_ids_after[0]))
-        return redirect(url_for("done"))
-    annotation = {
-        "status": status,
-        **field_values,
-        "updated_at": datetime.utcnow().isoformat() + "Z",
-    }
+        abort(400, "Choose keep or discard.")
+    paper_ids_before = list_paper_ids(check_only_kept=CHECK_ONLY_KEPT)
+    index = paper_ids_before.index(paper_id) if paper_id in paper_ids_before else -1
+    annotation = load_annotation(paper_id)
+    if FALSE_MODE:
+        binding = (annotation.get("source_first") or {}).get("review_binding")
+        if not binding or request.form.get("review_binding") != binding:
+            abort(409, "The item changed since it was displayed. Reload before reviewing.")
+        try:
+            if sha256_file(os.path.join(PAPER_ROOT, paper_id, FALSE_INVESTIGATION_FILENAME)) != binding:
+                abort(409, "Generation or verification changed. Reload before reviewing.")
+        except (OSError, ValueError):
+            abort(409, "Source stage records are unavailable. Complete verification before reviewing.")
+    review_fields = {}
+    if LEAN_MODE:
+        review_fields = {field["name"]: (request.form.get(field["name"]) or "").strip() for field in get_field_specs()}
+    annotation["review"] = {"status": status, **review_fields, "updated_at": utc_now()}
+    if FALSE_MODE:
+        annotation["review"]["binding"] = binding
+    if not (LEAN_MODE):
+        annotation["keep"] = status == "keep"
+        annotation["stage"] = "human_accepted" if annotation["keep"] else "human_rejected"
     save_annotation(paper_id, annotation)
-    if CHECK_ONLY:
-        return redirect(url_for("paper_view", paper_id=paper_id))
-    if status == "keep":
-        return redirect(url_for("paper_view", paper_id=paper_id))
-    skip_ids = get_session_skips() if not CHECK_ONLY else []
-    paper_ids = list_paper_ids(check_only=CHECK_ONLY, skip_ids=skip_ids)
-    if paper_ids:
-        return redirect(url_for("paper_view", paper_id=paper_ids[0]))
+    paper_ids_after = list_paper_ids(check_only_kept=CHECK_ONLY_KEPT)
+    if paper_ids_after:
+        if index >= 0:
+            for candidate in paper_ids_before[index + 1 :]:
+                if candidate in paper_ids_after:
+                    return redirect(url_for("paper_view", paper_id=candidate))
+        return redirect(url_for("paper_view", paper_id=paper_ids_after[0]))
     return redirect(url_for("done"))
 
 
@@ -292,7 +272,7 @@ def annotate(paper_id):
 def skip_paper(paper_id):
     if load_metadata(paper_id) is None:
         abort(404)
-    paper_ids = list_paper_ids(check_only=CHECK_ONLY)
+    paper_ids = list_paper_ids(check_only_kept=CHECK_ONLY_KEPT)
     if paper_id not in paper_ids:
         abort(404)
     index = paper_ids.index(paper_id)
@@ -309,23 +289,45 @@ def skip_paper(paper_id):
 
 @app.route("/done")
 def done():
-    return "All papers annotated.", 200
+    skipped = set(get_session_skips())
+    pending = [paper_id for paper_id in list_paper_ids(check_only_kept=CHECK_ONLY_KEPT) if paper_id not in skipped]
+    if pending:
+        return redirect(url_for("paper_view", paper_id=pending[0]))
+    return app.response_class(
+        "All currently available items have been reviewed or skipped. Refresh this page to pick up newly verified items.",
+        mimetype="text/plain",
+    )
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Annotate arXiv metadata.")
-    parser.add_argument("--check", action="store_true", help="Review kept papers with Q/A for manual edits.")
+    parser = argparse.ArgumentParser(description="Review generated arXiv benchmark items.")
     parser.add_argument(
         "--check-kept",
         action="store_true",
-        help="In check mode, only show papers previously marked keep in review.",
+        help="Include papers previously kept in human review.",
     )
-    parser.add_argument("--false", action="store_true", help="Use the false-statement pipeline metadata.")
-    parser.add_argument("--lean", action="store_true", help="Review kept Lean extraction candidates.")
+    modes = parser.add_mutually_exclusive_group()
+    modes.add_argument("--false", action="store_true", help="Use the false-statement pipeline metadata.")
+    modes.add_argument("--lean", action="store_true", help="Review kept Lean extraction candidates.")
+    parser.add_argument("--paper-root", default=None, help="Override the paper directory.")
+    parser.add_argument(
+        "--annotation-filename",
+        default=None,
+        help="Override the annotation filename used inside each paper directory.",
+    )
     parser.add_argument("--port", type=int, default=5000, help="Port to run the web server on.")
     args = parser.parse_args()
+    if args.paper_root:
+        PAPER_ROOT = os.path.abspath(args.paper_root)
+    if args.annotation_filename:
+        if (
+            args.annotation_filename in {".", ".."}
+            or "\x00" in args.annotation_filename
+            or os.path.basename(args.annotation_filename) != args.annotation_filename
+        ):
+            parser.error("--annotation-filename must be a filename, not a path")
+        ANNOTATION_FILENAME_OVERRIDE = args.annotation_filename
     LEAN_MODE = args.lean
-    CHECK_ONLY = args.check or args.check_kept or args.lean
     CHECK_ONLY_KEPT = args.check_kept
     FALSE_MODE = args.false
     app.run(debug=True, port=args.port)

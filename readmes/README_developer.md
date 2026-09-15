@@ -173,6 +173,7 @@ To add a new model add a config file in the `configs/models` folder. Each config
     - **glm**: `GLM_API_KEY`
     - **bigmodel**: `BIGMODEL_API_KEY`
     - **deepseek**: `DEEPSEEK_API_KEY`
+    - **meta**: `META_API_KEY`
     - **openrouter**: `OPENROUTER_API_KEY`
     - **vllm**: (runs locally; no API key required)
   - `human_readable_id`: A unique, descriptive identifier.
